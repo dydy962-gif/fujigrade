@@ -448,6 +448,122 @@ nav{
 </head>
 <body>
 
+<!-- ════ KREI 스플래시 스크린 (9번 작업) ════ -->
+<style>
+@keyframes kreiFadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes kreiLeafGrow{from{transform:scale(0) rotate(-45deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+@keyframes kreiPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes kreiFadeOut{to{opacity:0;visibility:hidden}}
+#kreiSplash{
+  position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;
+  background:linear-gradient(135deg,#005666 0%,#008486 50%,#0a3a3a 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  transition:opacity .6s ease-out, visibility .6s;
+}
+#kreiSplash.fade-out{opacity:0;visibility:hidden;pointer-events:none}
+.krei-logo-wrap{
+  display:flex;align-items:center;gap:18px;
+  animation:kreiFadeIn .8s ease-out both;
+}
+.krei-symbol{
+  width:90px;height:90px;border-radius:50%;
+  background:#fff;display:flex;align-items:center;justify-content:center;
+  position:relative;box-shadow:0 8px 24px rgba(0,0,0,.25);
+  animation:kreiPulse 2.4s ease-in-out infinite;
+}
+.krei-symbol::before{
+  content:'';position:absolute;width:34px;height:34px;
+  background:#008486;border-radius:0 100% 0 100%;
+  transform:rotate(-45deg);top:18px;left:28px;
+  animation:kreiLeafGrow 1s ease-out .3s both;
+}
+.krei-symbol-r{
+  position:relative;font-size:48px;font-weight:900;color:#005666;
+  z-index:1;letter-spacing:-2px;line-height:1;margin-top:8px;margin-left:-4px;
+}
+.krei-text{
+  display:flex;flex-direction:column;color:#fff;
+}
+.krei-text-en{
+  font-size:28px;font-weight:800;letter-spacing:.5px;line-height:1.1;
+}
+.krei-text-ko{
+  font-size:14px;font-weight:400;letter-spacing:.2em;opacity:.85;margin-top:4px;
+}
+.krei-subtitle{
+  margin-top:42px;color:#a8e6e6;font-size:13px;letter-spacing:.15em;
+  animation:kreiFadeIn .8s ease-out .5s both;text-transform:uppercase;
+}
+.krei-product{
+  margin-top:14px;color:#fff;font-size:32px;font-weight:700;letter-spacing:1px;
+  animation:kreiFadeIn .8s ease-out .7s both;
+}
+.krei-product-sub{
+  margin-top:6px;color:rgba(255,255,255,.7);font-size:12px;
+  animation:kreiFadeIn .8s ease-out .9s both;
+}
+.krei-loading{
+  position:absolute;bottom:40px;display:flex;gap:6px;
+  animation:kreiFadeIn .8s ease-out 1.1s both;
+}
+.krei-dot{
+  width:8px;height:8px;border-radius:50%;background:#7fd3d3;
+  animation:kreiPulse 1.2s ease-in-out infinite;
+}
+.krei-dot:nth-child(2){animation-delay:.2s}
+.krei-dot:nth-child(3){animation-delay:.4s}
+.krei-skip{
+  position:absolute;bottom:90px;background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.25);color:#fff;
+  padding:8px 20px;border-radius:20px;font-size:11px;cursor:pointer;
+  font-family:inherit;letter-spacing:.05em;transition:all .2s;
+  animation:kreiFadeIn .8s ease-out 1.3s both;
+}
+.krei-skip:hover{background:rgba(255,255,255,.2)}
+@media(max-width:480px){
+  .krei-symbol{width:70px;height:70px}
+  .krei-symbol::before{width:26px;height:26px;top:14px;left:22px}
+  .krei-symbol-r{font-size:36px}
+  .krei-text-en{font-size:22px}
+  .krei-text-ko{font-size:12px}
+  .krei-product{font-size:24px}
+}
+</style>
+<div id="kreiSplash">
+  <div class="krei-logo-wrap">
+    <div class="krei-symbol"><div class="krei-symbol-r">R</div></div>
+    <div class="krei-text">
+      <div class="krei-text-en">KREI</div>
+      <div class="krei-text-ko">한국농촌경제연구원</div>
+    </div>
+  </div>
+  <div class="krei-subtitle">Korea Rural Economic Institute</div>
+  <div class="krei-product">🍎 FujiGrade</div>
+  <div class="krei-product-sub">후지사과 착색 판정 시스템</div>
+  <button class="krei-skip" onclick="hideKreiSplash()">건너뛰기 →</button>
+  <div class="krei-loading">
+    <div class="krei-dot"></div>
+    <div class="krei-dot"></div>
+    <div class="krei-dot"></div>
+  </div>
+</div>
+<script>
+function hideKreiSplash(){
+  var s=document.getElementById('kreiSplash');
+  if(s){s.classList.add('fade-out');setTimeout(function(){s.style.display='none';},600);}
+  try{localStorage.setItem('kreiSplashSeen',Date.now());}catch(e){}
+}
+/* 2.5초 후 자동 숨김. 단, 같은 날 두 번째부터는 1초만 보여줌 */
+(function(){
+  var lastSeen=0;
+  try{lastSeen=parseInt(localStorage.getItem('kreiSplashSeen')||'0',10);}catch(e){}
+  var today=new Date();today.setHours(0,0,0,0);
+  var seenToday=lastSeen>today.getTime();
+  setTimeout(hideKreiSplash, seenToday?1000:2800);
+})();
+</script>
+
 <!-- 프로토콜 진단 배너 - file:// 환경 자동 경고 -->
 <div id="protocolBanner" style="display:none;background:#c62828;color:#fff;padding:10px 14px;font-size:12px;line-height:1.5;border-bottom:2px solid #ff5252;text-align:center">
   ⚠️ <strong>file:// 프로토콜로 열림</strong> — 보안 정책상 외부 API(날씨/주소검색) 차단됩니다.<br>
@@ -667,6 +783,19 @@ nav{
           </div>
           <div class="region-list" id="regionList"></div>
           <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">* 데이터는 이 기기에 저장됩니다. 판정 후 저장 동의 시 반영됩니다.</div>
+        </div>
+
+        <!-- ════ 실시간 통계 메모장 (1번 작업) ════ -->
+        <div class="stats-memo" id="statsMemo" style="margin-top:14px;background:linear-gradient(135deg,rgba(0,86,102,.18),rgba(0,132,134,.08));border:1px solid rgba(0,132,134,.3);border-radius:var(--rl);padding:14px">
+          <div class="env-head" style="margin-bottom:10px">
+            <span class="env-ttl" style="color:#7fd3d3">📊 실시간 통계 메모장</span>
+            <span style="font-family:var(--mm);font-size:10px;color:var(--muted);margin-left:auto" id="memoUpdated">아직 데이터 없음</span>
+          </div>
+          <div id="memoBody" style="font-size:12px;line-height:1.7;color:var(--cream);font-family:var(--fm)">
+            <div style="color:var(--muted);font-style:italic;text-align:center;padding:14px 0">
+              판정을 저장하면 여기에 자동으로 통계가 누적됩니다.
+            </div>
+          </div>
         </div>
 
       </div><!-- /env-sec -->
@@ -1574,7 +1703,7 @@ function applyGPS(lat,lon,src,knownAddress){
           setEV('envLoc',loc);
           setBadge(loc.length>14?loc.slice(0,14)+'..':loc,'var(--accent)');
           /* 도 변경된 경우만 지도 다시 그리기 (무한루프 방지) */
-          if(regionChanged) initKoreaMap();
+          if(regionChanged){initKoreaMap();renderStatsMemo();}
         } catch(parseErr) {
           console.error('[Nominatim] '+(attemptIdx+1)+'차 파싱 에러:', parseErr.message);
           /* 파싱 에러 발생 시 다음 시도로 넘어가지 않고 종료 */
@@ -2417,6 +2546,7 @@ function saveResultData(res){
 
   toast('💾 저장 완료! '+rname+' 평균 '+data[currentRegion].avg+'%');
   initKoreaMap();
+  renderStatsMemo();
   renderRecordsPage();
   updateSaveButton(); /* 버튼 상태 갱신 (저장됨 → 비활성) */
   return true;
@@ -2581,6 +2711,7 @@ function deleteOneRecord(id){
   toast('1건 삭제됨');
   renderRecordsPage();
   initKoreaMap();
+  renderStatsMemo();
 }
 
 function deleteSelectedRecords(){
@@ -2597,6 +2728,7 @@ function deleteSelectedRecords(){
   toast(Object.keys(ids).length+'건 삭제됨');
   renderRecordsPage();
   initKoreaMap();
+  renderStatsMemo();
 }
 
 function deleteAllRecords(){
@@ -2610,6 +2742,151 @@ function deleteAllRecords(){
   toast('전체 '+records.length+'건 삭제 완료');
   renderRecordsPage();
   initKoreaMap();
+  renderStatsMemo();
+}
+
+/* ════ 실시간 통계 메모장 렌더링 (1번 작업) ════
+   저장/삭제할 때마다 자동 호출돼서 현재까지 누적된 통계를 보여줌.
+   전국 평균, 도별 TOP3, 최근 활동, 등급 분포 등 한눈에 파악 가능. */
+function renderStatsMemo(){
+  var memoBody=document.getElementById('memoBody');
+  var memoUpdated=document.getElementById('memoUpdated');
+  if(!memoBody) return;
+
+  var records=loadAllRecords();
+  if(!records.length){
+    memoBody.innerHTML='<div style="color:var(--muted);font-style:italic;text-align:center;padding:14px 0">판정을 저장하면 여기에 자동으로 통계가 누적됩니다.</div>';
+    if(memoUpdated) memoUpdated.textContent='아직 데이터 없음';
+    return;
+  }
+
+  /* ── 1. 전국 평균 ── */
+  var totalSum=0;
+  for(var i=0;i<records.length;i++) totalSum+=records[i].pct;
+  var natAvg=Math.round(totalSum/records.length*10)/10;
+  var natCard=getCard(natAvg);
+
+  /* ── 2. 도별 집계 ── */
+  var regStats={};
+  for(var i=0;i<records.length;i++){
+    var r=records[i];
+    if(!r.region) continue;
+    if(!regStats[r.region]) regStats[r.region]={name:r.regionName||r.region,count:0,sum:0,maxPct:0};
+    regStats[r.region].count++;
+    regStats[r.region].sum+=r.pct;
+    if(r.pct>regStats[r.region].maxPct) regStats[r.region].maxPct=r.pct;
+  }
+  var regArr=[];
+  for(var k in regStats){if(regStats.hasOwnProperty(k)){var s=regStats[k];s.avg=Math.round(s.sum/s.count*10)/10;regArr.push(s);}}
+  regArr.sort(function(a,b){return b.avg-a.avg;}); /* 평균 높은 순 */
+  var top3=regArr.slice(0,3);
+
+  /* ── 3. 등급 분포 ── */
+  var gradeCnt={G1:0,G2:0,G3:0,G4:0,G5:0};
+  for(var i=0;i<records.length;i++){
+    var g=records[i].grade||'G3';
+    if(gradeCnt[g]!==undefined) gradeCnt[g]++;
+  }
+
+  /* ── 4. 최근 활동 (마지막 3건) ── */
+  var recent=records.slice(-3).reverse();
+
+  /* ── 5. 평균 날씨 (있는 것만) ── */
+  var sunArr=[],sunTotalArr=[],rainArr=[],tmaxArr=[];
+  for(var i=0;i<records.length;i++){
+    var w=records[i].weather;
+    if(!w) continue;
+    if(typeof w.sunHours!=='undefined'&&w.sunHours!==null) sunArr.push(w.sunHours);
+    if(typeof w.sunHoursTotal!=='undefined'&&w.sunHoursTotal!==null) sunTotalArr.push(w.sunHoursTotal);
+    if(typeof w.totalRain!=='undefined'&&w.totalRain!==null) rainArr.push(w.totalRain);
+    if(typeof w.avgMax!=='undefined'&&w.avgMax!==null) tmaxArr.push(w.avgMax);
+  }
+  function arrAvg(a){return a.length?Math.round(a.reduce(function(x,y){return x+y;},0)/a.length*10)/10:null;}
+  var avgSun=arrAvg(sunArr), avgSunTotal=arrAvg(sunTotalArr), avgRain=arrAvg(rainArr), avgTmax=arrAvg(tmaxArr);
+
+  /* ── HTML 조립 ── */
+  var html='';
+
+  /* 전국 평균 큰 박스 */
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+  html+='<div style="background:rgba(0,0,0,.25);border-radius:6px;padding:10px;text-align:center">';
+  html+='<div style="font-size:22px;font-weight:700;color:'+natCard.color+'">'+natAvg+'%</div>';
+  html+='<div style="font-size:10px;color:var(--muted);margin-top:2px">전국 평균 ('+natCard.l+')</div>';
+  html+='</div>';
+  html+='<div style="background:rgba(0,0,0,.25);border-radius:6px;padding:10px;text-align:center">';
+  html+='<div style="font-size:22px;font-weight:700;color:#7fd3d3">'+records.length+'<span style="font-size:13px;opacity:.6">건</span></div>';
+  html+='<div style="font-size:10px;color:var(--muted);margin-top:2px">'+regArr.length+'개 지역 측정</div>';
+  html+='</div>';
+  html+='</div>';
+
+  /* 도별 TOP 3 */
+  if(top3.length){
+    html+='<div style="background:rgba(0,0,0,.18);border-radius:6px;padding:10px;margin-bottom:10px">';
+    html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🏆 착색률 TOP 3 지역</div>';
+    for(var i=0;i<top3.length;i++){
+      var t=top3[i];
+      var tCard=getCard(t.avg);
+      var medal=i===0?'🥇':i===1?'🥈':'🥉';
+      html+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:'+(i<top3.length-1?'1px solid rgba(255,255,255,.05)':'none')+'">';
+      html+='<span style="font-size:14px">'+medal+'</span>';
+      html+='<span style="flex:1;font-size:12px">'+t.name+' <span style="color:var(--muted);font-size:10px">('+t.count+'건)</span></span>';
+      html+='<span style="font-weight:600;color:'+tCard.color+'">'+t.avg+'%</span>';
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+
+  /* 등급 분포 막대 */
+  var maxG=Math.max(gradeCnt.G1,gradeCnt.G2,gradeCnt.G3,gradeCnt.G4,gradeCnt.G5,1);
+  html+='<div style="background:rgba(0,0,0,.18);border-radius:6px;padding:10px;margin-bottom:10px">';
+  html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">📊 등급 분포</div>';
+  var gradeColors={G1:'#b25358',G2:'#b26661',G3:'#af7969',G4:'#a68c70',G5:'#9d9d77'};
+  for(var gi=1;gi<=5;gi++){
+    var gk='G'+gi;
+    var cnt=gradeCnt[gk];
+    var w=Math.round(cnt/maxG*100);
+    html+='<div style="display:flex;align-items:center;gap:6px;margin:3px 0">';
+    html+='<span style="font-size:10px;color:var(--muted);width:22px">'+gk+'</span>';
+    html+='<div style="flex:1;height:14px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden">';
+    html+='<div style="width:'+w+'%;height:100%;background:'+gradeColors[gk]+';transition:width .4s"></div>';
+    html+='</div>';
+    html+='<span style="font-size:11px;width:30px;text-align:right;color:var(--cream)">'+cnt+'건</span>';
+    html+='</div>';
+  }
+  html+='</div>';
+
+  /* 평균 날씨 (데이터 있는 것만 표시) */
+  if(avgSun!==null||avgRain!==null||avgTmax!==null){
+    html+='<div style="background:rgba(0,0,0,.18);border-radius:6px;padding:10px;margin-bottom:10px">';
+    html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🌤 측정 지역 평균 날씨</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:11px">';
+    if(avgSun!==null) html+='<div>☀️ 일평균 일조: <b>'+avgSun+'h</b></div>';
+    if(avgSunTotal!==null) html+='<div>🔆 2주 누적 일조: <b>'+avgSunTotal+'h</b></div>';
+    if(avgTmax!==null) html+='<div>🌡 평균최고: <b>'+avgTmax+'°</b></div>';
+    if(avgRain!==null) html+='<div>🌧 평균강수: <b>'+avgRain+'mm</b></div>';
+    html+='</div>';
+    html+='</div>';
+  }
+
+  /* 최근 활동 */
+  if(recent.length){
+    html+='<div style="background:rgba(0,0,0,.18);border-radius:6px;padding:10px">';
+    html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🕒 최근 활동</div>';
+    for(var i=0;i<recent.length;i++){
+      var rc=recent[i];
+      var rcCard=getCard(rc.pct);
+      html+='<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px">';
+      html+='<span style="background:'+rc.gradeColor+';color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:600">'+rc.grade+'</span>';
+      html+='<span style="flex:1;color:var(--cream)">'+(rc.regionName||'—')+'</span>';
+      html+='<span style="color:var(--muted);font-size:10px">'+rc.date.slice(5)+'</span>';
+      html+='<span style="color:'+rcCard.color+';font-weight:600;width:50px;text-align:right">'+rc.pct+'%</span>';
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+
+  memoBody.innerHTML=html;
+  if(memoUpdated) memoUpdated.textContent='업데이트 '+new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
 }
 
 /* 기록 삭제 시 도별 집계에서 해당 항목 차감 */
@@ -2893,9 +3170,11 @@ document.getElementById('harvestDate').value=new Date().toISOString().slice(0,10
 
 document.addEventListener('DOMContentLoaded',function(){
   initKoreaMap();
+  renderStatsMemo();
   renderRecordsPage();
 });
 initKoreaMap();
+renderStatsMemo();
 renderRecordsPage();
 </script>
 </body>

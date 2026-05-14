@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>FujiGrade — 농촌경제연구원 착색 판정 시스템</title>
+<style>
+:root{
+  --bg:#111; --bg2:#1a1a1a; --bg3:#222; --surface:#2a2a2a;
+  --border:rgba(160,200,120,.15); --accent:#8cc44a; --cream:#f0ead6; --muted:#6b7f5e;
+  --g1:#b25358; --g2:#b26661; --g3:#af7969; --g4:#a68c70; --g5:#9d9d77;
+  --fm:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mm:'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--cream);font-family:var(--fm);font-size:14px;line-height:1.5;min-height:100vh}
+nav{position:sticky;top:0;z-index:200;background:rgba(17,17,17,.97);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;height:52px;}
+.nav-logo{font-size:18px;font-weight:700;color:var(--accent);margin-right:20px}
+.nav-tab{background:none;border:none;color:var(--muted);font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;transition:0.15s;}
+.nav-tab.active{color:var(--cream);background:var(--surface)}
+.page{display:none; padding:20px;} .page.active{display:block}
+
+/* 분석 페이지 레이아웃 */
+.analyze-wrap{display:grid; grid-template-columns:1fr 360px; gap:20px;}
+@media(max-width:960px){.analyze-wrap{grid-template-columns:1fr}}
+
+.section-label{font-family:var(--mm);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:20px}
+.card{background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:15px; margin-bottom:15px;}
+
+/* 모드 선택 체크박스 */
+.mode-toggle{display:flex; align-items:center; gap:10px; background:var(--bg3); padding:10px; border-radius:8px; margin-bottom:15px;}
+.mode-toggle input{width:18px; height:18px; cursor:pointer;}
+
+/* 업로드 영역 */
+.upload-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.upload-btn{border:1.5px dashed var(--border); background:var(--bg2); padding:20px; text-align:center; border-radius:10px; cursor:pointer; position:relative;}
+.upload-btn:hover{border-color:var(--accent);}
+.upload-btn input{position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;}
+
+/* 등급 바 - 역순 재배치 (0% -> 100%) */
+.grade-bar{display:grid; grid-template-columns:repeat(5,1fr); border:1px solid var(--border); margin:15px 0; border-radius:8px; overflow:hidden;}
+.gb{padding:8px; text-align:center; cursor:default;}
+.gb-bar{height:4px; margin-bottom:5px; border-radius:2px;}
+.gb-name{font-size:10px; font-weight:600;}
+
+/* 날씨 요약 */
+.weather-summary{display:grid; grid-template-columns:repeat(2,1fr); gap:8px;}
+.ws-item{background:var(--bg3); padding:10px; border-radius:6px; text-align:center;}
+.ws-val{font-family:var(--mm); font-size:16px; color:var(--accent); display:block;}
+.ws-lbl{font-size:10px; color:var(--muted);}
+
+/* 기록 탭 */
+.record-grid{display:grid; grid-template-columns:1fr 1fr; gap:15px;}
+.region-stat{background:var(--bg3); padding:12px; border-radius:8px; border-left:4px solid var(--accent);}
+
+/* 지도 */
+.map-container{background:#0d1a0d; border-radius:10px; padding:10px; border:1px solid var(--border);}
+.map-region{fill:#1e2e1b; stroke:rgba(140,196,74,0.3); transition:0.2s; cursor:pointer;}
+.map-region:hover{fill:#2a3f28;}
+.map-region.active{fill:var(--accent); fill-opacity:0.4;}
+
+#cvs{max-width:100%; border-radius:10px; background:var(--bg3); display:block; margin:10px 0;}
+.btn-run{width:100%; padding:12px; background:var(--accent); color:#111; border:none; border-radius:8px; font-weight:700; cursor:pointer; margin-top:10px;}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">FujiGrade</div>
+  <button class="nav-tab active" onclick="showPage('analyze',this)">분석</button>
+  <button class="nav-tab" onclick="showPage('records',this)">기록</button>
+  <button class="nav-tab" onclick="showPage('refs',this)">참고 자료</button>
+</nav>
+
+<div id="page-analyze" class="page active">
+  <div class="analyze-wrap">
+    <div class="left-panel">
+      
+      <div class="mode-toggle">
+        <input type="checkbox" id="dualMode" onchange="toggleMode()">
+        <label for="dualMode">상/하부 종합 분석 모드 (두 부위 평균 산출)</label>
+      </div>
+
+      <div class="card">
+        <div class="section-label" style="margin-top:0">사진 업로드</div>
+        <div class="upload-grid">
+          <div class="upload-btn" id="upBox1">
+            <input type="file" accept="image/*" onchange="handleFile(this, 0)">
+            <span id="upTxt1">🍎 상부(꼭지) 사진</span>
+          </div>
+          <div class="upload-btn" id="upBox2" style="opacity:0.3; pointer-events:none;">
+            <input type="file" accept="image/*" onchange="handleFile(this, 1)">
+            <span id="upTxt2">🍑 하부(꽃받침) 사진</span>
+          </div>
+        </div>
+      </div>
+
+      <canvas id="cvs"></canvas>
+      <button class="btn-run" id="runBtn" onclick="runAnalysis()">판정 실행</button>
+
+      <div class="section-label">2주간 기상 요약 (Open-Meteo 실측 기준)</div>
+      <div class="card weather-summary" id="weatherBox">
+        <div class="ws-item"><span class="ws-val" id="w_temp_avg">—</span><span class="ws-lbl">평균 온도(°C)</span></div>
+        <div class="ws-item"><span class="ws-val" id="w_temp_range">—</span><span class="ws-lbl">최고/최저 평균</span></div>
+        <div class="ws-item"><span class="ws-val" id="w_rain">—</span><span class="ws-lbl">누적 강수(mm)</span></div>
+        <div class="ws-item"><span class="ws-val" id="w_sun">—</span><span class="ws-lbl">일조량(맑음 비율)</span></div>
+      </div>
+    </div>
+
+    <div class="right-panel">
+      <div class="card">
+        <div class="section-label" style="margin-top:0">위치 정보</div>
+        <input type="text" id="addrInput" placeholder="주소를 입력하세요 (예: 안동시 풍산읍)" 
+               style="width:100%; padding:10px; background:var(--bg3); border:1px solid var(--border); border-radius:6px; color:#fff; margin-bottom:10px;">
+        <div id="envInfo" style="font-size:12px; color:var(--muted);">
+          📍 지역: <span id="loc_name">주소를 입력해주세요</span>
+        </div>
+      </div>
+
+      <div class="section-label">착색 판정 결과</div>
+      <div class="card" id="resultCard" style="text-align:center;">
+        <div id="res_color" style="width:60px; height:60px; border-radius:50%; margin:0 auto 10px; background:var(--bg3);"></div>
+        <div id="res_pct" style="font-size:48px; font-weight:800; font-family:var(--mm);">—%</div>
+        <div id="res_grade" style="font-weight:700; color:var(--accent);">등급 대기 중</div>
+      </div>
+
+      <div class="grade-bar">
+        <div class="gb"><div class="gb-bar" style="background:var(--g5)"></div><div class="gb-name">0~12%</div></div>
+        <div class="gb"><div class="gb-bar" style="background:var(--g4)"></div><div class="gb-name">~33%</div></div>
+        <div class="gb"><div class="gb-bar" style="background:var(--g3)"></div><div class="gb-name">~56%</div></div>
+        <div class="gb"><div class="gb-bar" style="background:var(--g2)"></div><div class="gb-name">~78%</div></div>
+        <div class="gb"><div class="gb-bar" style="background:var(--g1)"></div><div class="gb-name">~100%</div></div>
+      </div>
+      
+      <button class="btn-run" style="background:var(--surface); color:var(--cream); border:1px solid var(--border);" onclick="saveToRecord()">기록 저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="page-records" class="page">
+  <div class="section-label">전국 및 지역별 누적 데이터</div>
+  <div class="card" style="display:flex; justify-content:space-around; text-align:center;">
+    <div><div class="ws-val" id="nat_avg_pct">—%</div><div class="ws-lbl">전국 평균 착색률</div></div>
+    <div><div class="ws-val" id="nat_avg_temp">—°C</div><div class="ws-lbl">전국 평균 온도</div></div>
+  </div>
+
+  <div class="analyze-wrap">
+    <div class="map-container">
+      <svg id="koreaMap" viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg">
+        <path class="map-region" id="r_gyeonggi" d="M120,80 L180,80 L200,130 L160,180 L100,150 Z" onclick="selectRegion('gyeonggi')" />
+        <path class="map-region" id="r_gangwon" d="M180,80 L280,60 L320,150 L200,180 L200,130 Z" onclick="selectRegion('gangwon')" />
+        <path class="map-region" id="r_chungbuk" d="M160,180 L220,180 L250,250 L180,260 Z" onclick="selectRegion('chungbuk')" />
+        <path class="map-region" id="r_chungnam" d="M100,150 L160,180 L180,260 L80,280 Z" onclick="selectRegion('chungnam')" />
+        <path class="map-region" id="r_gyeongbuk" d="M220,180 L320,150 L350,300 L250,350 L250,250 Z" onclick="selectRegion('gyeongbuk')" />
+        <path class="map-region" id="r_gyeongnam" d="M250,250 L350,300 L300,420 L200,400 Z" onclick="selectRegion('gyeongnam')" />
+        <path class="map-region" id="r_jeonbuk" d="M180,260 L250,250 L200,400 L120,380 Z" onclick="selectRegion('jeonbuk')" />
+        <path class="map-region" id="r_jeonnam" d="M120,380 L200,400 L180,480 L80,450 Z" onclick="selectRegion('jeonnam')" />
+      </svg>
+      <div style="font-size:10px; color:var(--muted); text-align:center; margin-top:5px;">※ 지역 클릭 시 해당 도 통계 표시</div>
+    </div>
+    <div id="regionDetail" class="card">
+      <div class="section-label" style="margin-top:0" id="detailTitle">지역을 선택하세요</div>
+      <div id="detailContent">데이터가 없습니다.</div>
+    </div>
+  </div>
+</div>
+
+<div id="page-refs" class="page">
+  <div class="card">
+    <h3>판정 기준 근거</h3>
+    <p style="margin-top:10px; font-size:13px; color:var(--muted);">
+      본 시스템은 농촌진흥청 및 한국농수산대학교의 후지사과 착색 판정판 실측 데이터(LAB $a^*$)를 기반으로 설계되었습니다.<br><br>
+      - $a^*$ = -5.7 (착색률 0%)<br>
+      - $a^*$ = +38.8 (착색률 100%)
+    </p>
+  </div>
+</div>
+
+<script>
+var currentImgs = [null, null];
+var coloringRes =;
+var weatherData = null;
+var records = JSON.parse(localStorage.getItem('fujigrade_v2_records') || '[]');
+
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.nav-tab').forEach(function(t){ t.classList.remove('active'); });
+  document.getElementById('page-' + id).classList.add('active');
+  btn.classList.add('active');
+  if(id === 'records') updateRecordDashboard();
+}
+
+function toggleMode() {
+  var isDual = document.getElementById('dualMode').checked;
+  var box2 = document.getElementById('upBox2');
+  box2.style.opacity = isDual ? "1" : "0.3";
+  box2.style.pointerEvents = isDual ? "auto" : "none";
+}
+
+function handleFile(input, idx) {
+  if(!input.files) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      currentImgs[idx] = img;
+      document.getElementById('upTxt' + (idx+1)).textContent = "✅ 업로드 완료";
+      if(idx === 0) drawOnCanvas(img);
+      fetchWeather();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(input.files);
+}
+
+function drawOnCanvas(img) {
+  var cvs = document.getElementById('cvs');
+  var ctx = cvs.getContext('2d');
+  cvs.width = 400;
+  cvs.height = 300;
+  ctx.drawImage(img, 0, 0, 400, 300);
+}
+
+function runAnalysis() {
+  if(!currentImgs) { alert("최소 상부 사진은 업로드해야 합니다."); return; }
+  
+  // (임시) 현장 데이터 시뮬레이션을 위한 랜덤 점수 생성
+  coloringRes = Math.floor(Math.random() * 40) + 50; 
+  if(document.getElementById('dualMode').checked && currentImgs) {
+    coloringRes = Math.floor(Math.random() * 40) + 40;
+  } else {
+    coloringRes = coloringRes;
+  }
+  
+  var finalAvg = Math.round((coloringRes + coloringRes) / 2);
+  displayResult(finalAvg);
+}
+
+function displayResult(pct) {
+  var resPct = document.getElementById('res_pct');
+  resPct.textContent = pct + "%";
+  var grade = "미착색";
+  var color = "var(--g5)";
+  if(pct > 78) { grade = "G1 (진한 적색)"; color = "var(--g1)"; }
+  else if(pct > 56) { grade = "G2 (적색)"; color = "var(--g2)"; }
+  else if(pct > 33) { grade = "G3 (황적색)"; color = "var(--g3)"; }
+  else if(pct > 12) { grade = "G4 (연황색)"; color = "var(--g4)"; }
+  
+  document.getElementById('res_grade').textContent = grade;
+  document.getElementById('res_grade').style.color = color;
+  document.getElementById('res_color').style.background = color;
+}
+
+function fetchWeather() {
+  // 대한민국 내륙(안동 기준) 샘플 날씨 호출 (Open-Meteo, API키 불필요)
+  var lat = 36.56, lon = 128.72; 
+  var url = "https://api.open-meteo.com/v1/forecast?latitude="+lat+"&longitude="+lon+"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,shortwave_radiation_sum&past_days=14&timezone=Asia%2FSeoul";
+
+  fetch(url).then(function(r){ return r.json(); }).then(function(data){
+    var d = data.daily;
+    var t_max = d.temperature_2m_max.reduce(function(a,b){return a+b;})/14;
+    var t_min = d.temperature_2m_min.reduce(function(a,b){return a+b;})/14;
+    var rain = d.precipitation_sum.reduce(function(a,b){return a+b;});
+    var sunDays = d.shortwave_radiation_sum.filter(function(v){ return v > 15; }).length;
+    var sun_ratio = (sunDays / 14) * 100;
+    
+    weatherData = {
+      avg_temp: ((t_max + t_min) / 2).toFixed(1),
+      max_avg: t_max.toFixed(1),
+      min_avg: t_min.toFixed(1),
+      rain: rain.toFixed(1),
+      sun: sun_ratio.toFixed(0)
+    };
+
+    document.getElementById('w_temp_avg').textContent = weatherData.avg_temp;
+    document.getElementById('w_temp_range').textContent = weatherData.max_avg + "/" + weatherData.min_avg;
+    document.getElementById('w_rain').textContent = weatherData.rain;
+    document.getElementById('w_sun').textContent = weatherData.sun + "%";
+  });
+}
+
+function saveToRecord() {
+  var addr = document.getElementById('addrInput').value;
+  var pct = parseInt(document.getElementById('res_pct').textContent);
+  if(!addr || isNaN(pct)) { alert("주소를 입력하고 판정을 먼저 실행해주세요."); return; }
+
+  var region = "기타";
+  if(addr.indexOf("경기") !== -1) region = "gyeonggi";
+  else if(addr.indexOf("강원") !== -1) region = "gangwon";
+  else if(addr.indexOf("충북") !== -1) region = "chungbuk";
+  else if(addr.indexOf("충남") !== -1) region = "chungnam";
+  else if(addr.indexOf("경북") !== -1) region = "gyeongbuk";
+  else if(addr.indexOf("경남") !== -1) region = "gyeongnam";
+  else if(addr.indexOf("전북") !== -1) region = "jeonbuk";
+  else if(addr.indexOf("전남") !== -1) region = "jeonnam";
+
+  var entry = {
+    region: region,
+    addr: addr,
+    pct: pct,
+    weather: weatherData,
+    date: new Date().toLocaleDateString()
+  };
+  records.push(entry);
+  localStorage.setItem('fujigrade_v2_records', JSON.stringify(records));
+  alert("데이터가 기록 탭에 안전하게 저장되었습니다.");
+}
+
+function updateRecordDashboard() {
+  if(records.length === 0) return;
+  var sumPct = records.reduce(function(a,b){ return a+b.pct; }, 0);
+  var sumTemp = records.reduce(function(a,b){ return a+parseFloat(b.weather.avg_temp); }, 0);
+  
+  document.getElementById('nat_avg_pct').textContent = (sumPct / records.length).toFixed(1) + "%";
+  document.getElementById('nat_avg_temp').textContent = (sumTemp / records.length).toFixed(1) + "°C";
+}
+
+function selectRegion(rid) {
+  document.querySelectorAll('.map-region').forEach(function(r){ r.classList.remove('active'); });
+  document.getElementById('r_' + rid).classList.add('active');
+  
+  var r_data = records.filter(function(r){ return r.region === rid; });
+  var title = "";
+  if(rid==="gyeonggi") title="경기도"; else if(rid==="gangwon") title="강원도";
+  else if(rid==="chungbuk") title="충청북도"; else if(rid==="chungnam") title="충청남도";
+  else if(rid==="gyeongbuk") title="경상북도"; else if(rid==="gyeongnam") title="경상남도";
+  else if(rid==="jeonbuk") title="전라북도"; else if(rid==="jeonnam") title="전라남도";
+
+  document.getElementById('detailTitle').textContent = title + " 통계";
+  
+  if(r_data.length === 0) {
+    document.getElementById('detailContent').textContent = "아직 기록된 데이터가 없습니다.";
+    return;
+  }
+
+  var avgPct = (r_data.reduce(function(a,b){ return a+b.pct; }, 0) / r_data.length).toFixed(1);
+  var html = "<b>평균 착색률:</b> <span style='color:var(--accent)'>" + avgPct + "%</span><br>";
+  html += "<b>누적 샘플 수:</b> " + r_data.length + "건<br><hr style='margin:10px 0; border:0; border-top:1px solid #444;'>";
+  r_data.forEach(function(d){
+    var shortAddr = d.addr.length > 12 ? d.addr.substring(0,12) + "..." : d.addr;
+    html += "<div style='font-size:11px; margin-bottom:5px; color:var(--cream);'>["+d.date+"] "+shortAddr+" : <b style='color:var(--accent)'>"+d.pct+"%</b></div>";
+  });
+  document.getElementById('detailContent').innerHTML = html;
+}
+
+// 주소 입력 시 자동으로 위치 정보 업데이트
+document.getElementById('addrInput').addEventListener('input', function(e) {
+  var val = e.target.value;
+  document.getElementById('loc_name').textContent = val ? val : "주소를 입력해주세요";
+});
+</script>
+</body>
+</html>

@@ -287,7 +287,7 @@ nav{
   border:1px solid rgba(140,196,74,.15);
 }
 .ws-title{font-size:11px;color:var(--accent);font-family:var(--mm);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
-.ws-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.ws-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
 .ws-card{
   background:var(--bg2);border-radius:8px;padding:12px 6px;text-align:center;
   border:1px solid var(--border);
@@ -605,6 +605,11 @@ nav{
               <div class="ws-icon">☀️</div>
               <div class="ws-val" id="wsSunDays">—</div>
               <div class="ws-lbl">일평균 일조시간</div>
+            </div>
+            <div class="ws-card">
+              <div class="ws-icon">🔆</div>
+              <div class="ws-val" id="wsSunTotal">—</div>
+              <div class="ws-lbl">2주 누적 일조</div>
             </div>
             <div class="ws-card">
               <div class="ws-icon">🌡️</div>
@@ -1430,50 +1435,67 @@ function applyGPS(lat,lon,src,knownAddress){
         return r.json();
       })
       .then(function(d){
-        console.log('[Nominatim] 전체 응답:', d);
-        if(d.error){
-          console.warn('[Nominatim] error 필드:', d.error);
-          reverseGeocode(lat,lon,attemptIdx+1);
-          return;
-        }
-        var a=d.address||{};
-        console.log('[Nominatim] address:', a);
-
-        var sido=a.province||a.state||a.region||'';
-        var sigungu=a.city||a.county||a.town||a.city_district||a.borough||'';
-        /* 리/읍/면 우선 */
-        var eupmyeondong=a.village||a.hamlet||a.neighbourhood||a.suburb||a.quarter||'';
-        if(!eupmyeondong && a.town && a.town!==sigungu) eupmyeondong=a.town;
-        if(eupmyeondong===sigungu) eupmyeondong='';
-        var loc=(sido+' '+sigungu+' '+eupmyeondong).replace(/\s+/g,' ').trim();
-
-        /* display_name 폴백 */
-        if(!loc && d.display_name){
-          var parts=d.display_name.split(',').map(function(s){return s.trim();});
-          var addrParts=[];
-          for(var i=0;i<parts.length;i++){
-            if(/^\d/.test(parts[i])) continue;
-            if(parts[i]==='대한민국'||parts[i]==='South Korea') continue;
-            addrParts.push(parts[i]);
+        try {
+          console.log('[Nominatim] 응답 JSON:', JSON.stringify(d).slice(0, 500));
+          if(d.error){
+            console.warn('[Nominatim] error 필드:', d.error);
+            reverseGeocode(lat,lon,attemptIdx+1);
+            return;
           }
-          loc=addrParts.slice(0,3).reverse().join(' ');
-        }
+          var a=d.address||{};
+          console.log('[Nominatim] address keys:', Object.keys(a).join(','));
 
-        if(!loc){
-          console.warn('[Nominatim] '+(attemptIdx+1)+'차 빈 응답, 재시도');
-          reverseGeocode(lat,lon,attemptIdx+1);
-          return;
-        }
+          var sido=a.province||a.state||a.region||'';
+          var sigungu=a.city||a.county||a.town||a.city_district||a.borough||'';
+          /* 리/읍/면 우선 */
+          var eupmyeondong=a.village||a.hamlet||a.neighbourhood||a.suburb||a.quarter||'';
+          if(!eupmyeondong && a.town && a.town!==sigungu) eupmyeondong=a.town;
+          if(eupmyeondong===sigungu) eupmyeondong='';
+          var loc=(sido+' '+sigungu+' '+eupmyeondong).replace(/\s+/g,' ').trim();
 
-        currentAddress=loc;
-        var newRegion=detectRegion(lat,lon,loc);
-        if(newRegion!==currentRegion){
-          console.log('[Region] '+currentRegion+' → '+newRegion+' (주소판별)');
-          currentRegion=newRegion;
+          /* display_name 폴백 - 단순화 */
+          if(!loc && d.display_name && typeof d.display_name === 'string'){
+            var dn = d.display_name;
+            /* "신일리, 영월읍, 영월군, 강원특별자치도, ..." → 앞 3개만 */
+            var parts = dn.split(',');
+            var clean = [];
+            for(var i=0; i<parts.length && clean.length<4; i++){
+              var p = parts[i].trim();
+              if(!p) continue;
+              if(/^\d/.test(p)) continue;
+              if(p === '대한민국' || p === 'South Korea') continue;
+              clean.push(p);
+            }
+            /* 한국 Nominatim은 작은 단위→큰 단위 순이므로 뒤집어서 표시 */
+            clean.reverse();
+            loc = clean.join(' ');
+          }
+
+          if(!loc){
+            console.warn('[Nominatim] '+(attemptIdx+1)+'차 빈 응답, 재시도');
+            reverseGeocode(lat,lon,attemptIdx+1);
+            return;
+          }
+
+          console.log('[Nominatim] 주소 추출:', loc);
+          currentAddress=loc;
+          var newRegion=detectRegion(lat,lon,loc);
+          var regionChanged=(newRegion!==currentRegion);
+          if(regionChanged){
+            console.log('[Region] '+currentRegion+' → '+newRegion+' (주소판별)');
+            currentRegion=newRegion;
+          }
+          setEV('envLoc',loc);
+          setBadge(loc.length>14?loc.slice(0,14)+'..':loc,'var(--accent)');
+          /* 도 변경된 경우만 지도 다시 그리기 (무한루프 방지) */
+          if(regionChanged) initKoreaMap();
+        } catch(parseErr) {
+          console.error('[Nominatim] '+(attemptIdx+1)+'차 파싱 에러:', parseErr.message);
+          /* 파싱 에러 발생 시 다음 시도로 넘어가지 않고 종료 */
+          /* (무한 재귀 방지) */
+          setEV('envLoc','주소 파싱 실패');
+          setBadge('주소 파싱 실패','var(--warn)');
         }
-        setEV('envLoc',loc);
-        setBadge(loc.length>14?loc.slice(0,14)+'..':loc,'var(--accent)');
-        initKoreaMap();
       })
       .catch(function(e){
         console.error('[Nominatim] '+(attemptIdx+1)+'차 실패:', e.message);
@@ -1571,23 +1593,15 @@ function renderWeatherSummary(days){
   var avgSunHours=sunshineDays>0?Math.round((sunshineTotal/sunshineDays/3600)*10)/10:null;
   var totalSunHours=sunshineDays>0?Math.round((sunshineTotal/3600)*10)/10:null;
 
-  /* 일조량 카드: 일평균 h + 2주 합계 h */
-  var sunEl=document.getElementById('wsSunDays');
-  if(sunEl){
-    if(avgSunHours!==null && totalSunHours!==null){
-      sunEl.innerHTML=avgSunHours+'h<span style="display:block;font-size:11px;opacity:0.7;margin-top:2px">/ 2주 '+totalSunHours+'h</span>';
-    } else {
-      sunEl.textContent='—';
-    }
-  }
+  /* 일조량 카드 2개: 일평균 + 2주 누적 */
+  document.getElementById('wsSunDays').textContent=(avgSunHours!==null?avgSunHours+'h':'—');
+  var wsSunTotalEl=document.getElementById('wsSunTotal');
+  if(wsSunTotalEl) wsSunTotalEl.textContent=(totalSunHours!==null?totalSunHours+'h':'—');
+
   document.getElementById('wsAvgMax').textContent=(avgMax!==null?avgMax+'°':'—');
   document.getElementById('wsAvgMin').textContent=(avgMin!==null?avgMin+'°':'—');
   document.getElementById('wsAvgTemp').textContent=(avgAll!==null?avgAll+'°':'—');
   document.getElementById('wsTotalRain').textContent=Math.round(totalRain*10)/10+'mm';
-
-  /* 일조량 카드 라벨도 변경 */
-  var sunLabel=document.querySelector('#wsSunDays + .ws-lbl');
-  if(sunLabel) sunLabel.textContent='일평균 일조 / 2주합';
 
   var startD=days.time[0],endD=days.time[days.time.length-1];
   document.getElementById('wsSummaryTitle').textContent='2주 평균 ('+startD.slice(5)+' ~ '+endD.slice(5)+')';
@@ -2191,7 +2205,7 @@ function updateMapDot(lat,lon){
   var p=ll2svgXY(lat,lon);
   mgrp.innerHTML='<circle cx="'+p.x+'" cy="'+p.y+'" r="10" fill="rgba(255,193,7,0.25)" stroke="#ffc107" stroke-width="2"/>'
     +'<circle cx="'+p.x+'" cy="'+p.y+'" r="5" fill="#ffc107" stroke="#fff" stroke-width="2"/>';
-  initKoreaMap();
+  /* ★ initKoreaMap() 재호출 제거 — 무한루프 방지 */
 }
 function renderRegionList(data){
   var el=document.getElementById('regionList');

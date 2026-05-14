@@ -443,6 +443,8 @@ nav{
   .ws-card{padding:10px 4px}
 }
 </style>
+<!-- SheetJS (엑셀 내보내기용) - 3번 작업 -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -552,7 +554,7 @@ nav{
       <!-- 캔버스 -->
       <div id="cvs-wrap">
         <canvas id="cvs"></canvas>
-        <div class="mark-tip">💡 <span>꼭지 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.</span></div>
+        <div class="mark-tip">💡 <span id="markTipText">꼭지 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.</span></div>
         <div class="toolbar">
           <button class="tb mark-on" id="bMark" onclick="setMode('mark')">🔴 꼭지 마킹</button>
           <button class="tb" id="bCard" onclick="setMode('card')">🎯 카드 영역</button>
@@ -884,18 +886,38 @@ function onFiles(files){
   for(var i=0;i<files.length;i++) addPhoto(files[i]);
 }
 
-/* ── 파일 업로드 (2장 모드) ── */
+/* ── 파일 업로드 (2장 모드) ──
+   [수정 2026-05-14 묶음2] dualPhotos에만 임시저장하던 것을 photos 배열에 정식 추가.
+   사용자는 사진 그리드에서 꼭지/하부 사이를 전환하며 각각 마킹.
+   판정 버튼 누르면 두 사진 다 자동 분석 후 가중평균(꼭지60%, 하부40%) 종합. */
 function onDualFile(files,side){
   if(!files||!files.length) return;
   var file=files[0];
   var reader=new FileReader();
   reader.onload=function(e){
-    dualPhotos[side]={url:e.target.result,file:file,res:null};
-    document.getElementById(side==='top'?'topStatus':'bottomStatus').textContent=file.name.slice(0,14);
-    document.getElementById(side==='top'?'topStatus':'bottomStatus').style.color='var(--accent)';
-    if(dualPhotos.top&&dualPhotos.bottom){
-      document.getElementById('runBtn').disabled=false;
-    }
+    var img=new Image();
+    img.onload=function(){
+      /* 같은 side 사진이 이미 있으면 교체 */
+      for(var i=photos.length-1;i>=0;i--){
+        if(photos[i].mode===side){
+          photos.splice(i,1);
+          if(aIdx>=i&&aIdx>0) aIdx--;
+        }
+      }
+      var idx=photos.length;
+      var obj={img:img,url:e.target.result,file:file,apples:[],cardRs:{},res:null,mode:side};
+      photos.push(obj);
+      /* 호환용 dualPhotos 참조 유지 */
+      dualPhotos[side]={url:e.target.result,file:file,res:null,photoIdx:idx};
+      /* 상태 표시 갱신 */
+      document.getElementById(side==='top'?'topStatus':'bottomStatus').textContent=file.name.slice(0,14)+' ✓';
+      document.getElementById(side==='top'?'topStatus':'bottomStatus').style.color='var(--accent)';
+      renderPhotoGrid();
+      selPhoto(idx);
+      autoScanPhoto(obj,idx);
+      checkRun();
+    };
+    img.src=e.target.result;
   };
   reader.readAsDataURL(file);
 }
@@ -927,6 +949,12 @@ function renderPhotoGrid(){
     h+='<div class="ph'+on+'" onclick="selPhoto('+i+')">';
     h+='<img src="'+p.url+'">';
     h+='<span class="ph-n">'+(i+1)+'</span>';
+    /* ★ 꼭지/하부 모드 라벨 (2장 모드 작업) */
+    if(p.mode==='top'){
+      h+='<span style="position:absolute;top:3px;left:24px;background:rgba(255,100,100,.9);color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:6px">🔴 꼭지</span>';
+    } else if(p.mode==='bottom'){
+      h+='<span style="position:absolute;top:3px;left:24px;background:rgba(100,181,246,.9);color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:6px">🔵 하부</span>';
+    }
     /* ★ GPS 인식 여부 표시 */
     if(p.gps&&p.gps.lat){
       h+='<span style="position:absolute;top:3px;right:24px;background:rgba(140,196,74,.9);color:#fff;font-size:9px;padding:1px 4px;border-radius:6px" title="'+(p.gps.address||p.gps.source)+'">📍</span>';
@@ -949,6 +977,13 @@ function selPhoto(i){
   redraw();
   checkRun();
   renderPhotoGrid();
+  /* ★ 마킹 안내 메시지를 사진 모드에 맞춰 변경 */
+  var tipEl=document.getElementById('markTipText');
+  if(tipEl){
+    if(p.mode==='top') tipEl.innerHTML='🔴 <b>꼭지(상부)</b> 부위를 클릭 또는 드래그하세요.';
+    else if(p.mode==='bottom') tipEl.innerHTML='🔵 <b>하부(꽃받침)</b> 부위를 클릭 또는 드래그하세요.';
+    else tipEl.textContent='꼭지 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.';
+  }
   /* ★ 사진별 저장된 GPS가 있으면 자동 복원 */
   if(p.gps && p.gps.lat && p.gps.lon){
     applyGPS(p.gps.lat,p.gps.lon,p.gps.source,p.gps.address);
@@ -1146,9 +1181,26 @@ function setMode(m){
 function checkRun(){
   var ok=false;
   if(photoMode==='both'){
-    ok=dualPhotos.top!==null&&dualPhotos.bottom!==null;
+    /* 양쪽 사진이 photos에 있고, 각각 1개 이상 마킹돼야 함 */
+    var topP=null,botP=null;
+    for(var i=0;i<photos.length;i++){
+      if(photos[i].mode==='top') topP=photos[i];
+      if(photos[i].mode==='bottom') botP=photos[i];
+    }
+    ok=topP&&botP&&topP.apples.length>0&&botP.apples.length>0;
+    /* 판정 버튼 라벨에 진행 상태 표시 */
+    var btn=document.getElementById('runBtn');
+    if(btn){
+      if(!topP||!botP) btn.innerHTML='▶ 판정 (꼭지/하부 사진 둘 다 필요)';
+      else if(topP.apples.length===0&&botP.apples.length===0) btn.innerHTML='▶ 판정 (양쪽 마킹 필요)';
+      else if(topP.apples.length===0) btn.innerHTML='▶ 판정 (꼭지 마킹 필요)';
+      else if(botP.apples.length===0) btn.innerHTML='▶ 판정 (하부 마킹 필요)';
+      else btn.innerHTML='▶ 종합 판정 (꼭지+하부)';
+    }
   } else {
     ok=aIdx>=0&&photos[aIdx]&&photos[aIdx].apples&&photos[aIdx].apples.length>0;
+    var btn2=document.getElementById('runBtn');
+    if(btn2) btn2.innerHTML='▶ 판정';
   }
   document.getElementById('runBtn').disabled=!ok;
 }
@@ -1210,41 +1262,67 @@ function runAnalysis(){
   updateSaveButton();
 }
 
-/* ── 2장 종합 판정 (항목11) ── */
+/* ── 2장 종합 판정 (항목11)
+   [수정 2026-05-14 묶음2] 두 사진을 자동으로 분석하고 가중평균(꼭지60%, 하부40%) */
 function runDualAnalysis(){
-  toast('2장 종합 분석은 각 사진에서 마킹을 완료한 후 별도로 실행합니다.\n꼭지 사진을 선택 후 마킹→판정, 하부 사진도 동일하게 진행하세요.');
-  /* 현재 구현: 각 사진 별도 판정 후 weighted average */
-  /* 꼭지 사진 처리 */
-  if(!dualPhotos.top||!dualPhotos.bottom){
-    toast('꼭지와 하부 사진을 모두 업로드하세요');
-    return;
-  }
-  /* 두 사진 모두 결과가 있으면 종합 */
-  var topRes=null,botRes=null;
+  var topP=null,botP=null,topIdx=-1,botIdx=-1;
   for(var i=0;i<photos.length;i++){
-    if(photos[i].res){
-      if(photos[i].mode==='top'||photos[i].mode==='both') topRes=photos[i].res;
-      if(photos[i].mode==='bottom') botRes=photos[i].res;
+    if(photos[i].mode==='top'){topP=photos[i];topIdx=i;}
+    if(photos[i].mode==='bottom'){botP=photos[i];botIdx=i;}
+  }
+  if(!topP||!botP){toast('꼭지/하부 사진이 모두 필요합니다');return;}
+  if(!topP.apples.length){toast('꼭지 사진을 먼저 마킹하세요');selPhoto(topIdx);return;}
+  if(!botP.apples.length){toast('하부 사진을 먼저 마킹하세요');selPhoto(botIdx);return;}
+
+  /* 각 사진 자동 분석 */
+  function analyzePhoto(p){
+    for(var i=0;i<p.apples.length;i++) p.apples[i].res=null;
+    var cal=calib(p);
+    var tot=0,cnt=0,Lsum=0;
+    for(var i=0;i<p.apples.length;i++){
+      var lab=exLab(p.apples[i].roi);
+      if(!lab) continue;
+      if(cal){lab.L+=cal.lO;lab.a+=cal.aO;}
+      var pc=getPct(lab.a);
+      p.apples[i].res={pct:pc,lab:lab,card:getCard(pc)};
+      tot+=pc;Lsum+=lab.L;cnt++;
     }
+    if(!cnt) return null;
+    var avg=Math.round(tot/cnt*10)/10;
+    var avgL=Lsum/cnt;
+    var avgCard=getCard(avg);
+    var conf=cal?0.90:0.72;
+    if(avgL<30||avgL>90) conf-=0.18;
+    conf=Math.round(Math.max(0.1,Math.min(1,conf))*100);
+    var scoreResult=calcScore(avg,avgCard,cnt,cal,avgL);
+    return {avg:avg,avgCard:avgCard,cnt:cnt,conf:conf,sc:scoreResult.total,items:scoreResult.items,avgL:avgL,cal:cal};
   }
-  if(topRes&&botRes){
-    var combined=Math.round((topRes.avg*0.6+botRes.avg*0.4)*10)/10;
-    var combinedCard=getCard(combined);
-    var combinedRes={
-      avg:combined,avgCard:combinedCard,
-      cnt:topRes.cnt+botRes.cnt,
-      conf:Math.round((topRes.conf*0.6+botRes.conf*0.4)),
-      sc:Math.round((topRes.sc*0.6+botRes.sc*0.4)),
-      items:[{l:'꼭지 착색률 (60%)',w:'꼭지: '+topRes.avg+'%',v:'+'+Math.round(topRes.avg*0.6),c:'pos'},{l:'하부 착색률 (40%)',w:'하부: '+botRes.avg+'%',v:'+'+Math.round(botRes.avg*0.4),c:'pos'}],
-      avgL:(topRes.avgL||50),cal:null,mode:'both',
-      topPct:topRes.avg,botPct:botRes.avg
-    };
-    showResult(combinedRes,{top:topRes.avg,bot:botRes.avg});
-    /* [정책 2026-05-14] 자동 저장 confirm 제거 */
-    updateSaveButton();
-  } else {
-    toast('먼저 각 사진을 선택해 꼭지/하부 마킹 후 판정을 각각 실행하세요.');
-  }
+  var topRes=analyzePhoto(topP);
+  var botRes=analyzePhoto(botP);
+  if(!topRes||!botRes){toast('픽셀 추출 실패. 마킹을 다시 해보세요');return;}
+  topP.res=topRes; botP.res=botRes;
+
+  /* 가중평균 종합 (꼭지 60% + 하부 40%) */
+  var combined=Math.round((topRes.avg*0.6+botRes.avg*0.4)*10)/10;
+  var combinedCard=getCard(combined);
+  var combinedRes={
+    avg:combined,avgCard:combinedCard,
+    cnt:topRes.cnt+botRes.cnt,
+    conf:Math.round((topRes.conf*0.6+botRes.conf*0.4)),
+    sc:Math.round((topRes.sc*0.6+botRes.sc*0.4)),
+    items:[
+      {l:'꼭지 착색률 (60%)',w:'꼭지: '+topRes.avg+'%, '+topRes.cnt+'개',v:'+'+Math.round(topRes.avg*0.6),c:'pos'},
+      {l:'하부 착색률 (40%)',w:'하부: '+botRes.avg+'%, '+botRes.cnt+'개',v:'+'+Math.round(botRes.avg*0.4),c:'pos'}
+    ],
+    avgL:(topRes.avgL*0.6+botRes.avgL*0.4),cal:null,mode:'both',
+    topPct:topRes.avg,botPct:botRes.avg
+  };
+  /* 두 사진 모두에 종합 결과 저장 (어느 쪽 선택해도 같은 결과 표시) */
+  topP.res=combinedRes; botP.res=combinedRes;
+  showResult(combinedRes,{top:topRes.avg,bot:botRes.avg});
+  renderPhotoGrid(); renderApples(); redraw(); updSummary();
+  updateSaveButton();
+  toast('🍎 종합 판정 완료! '+combined+'% (꼭지'+topRes.avg+'% · 하부'+botRes.avg+'%)');
 }
 
 function showResult(r, dualInfo){
@@ -2423,13 +2501,14 @@ function renderRecordsPage(){
   if(avgRain!==null) html+='<div class="rec-stat"><span class="sv">'+avgRain+'mm</span><span class="sl">평균강수량</span></div>';
   html+='</div>';
 
-  /* ── 일괄 삭제 도구모음 ── */
+  /* ── 일괄 삭제 + 엑셀 내보내기 도구모음 ── */
   html+='<div class="rec-toolbar" style="display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:10px;flex-wrap:wrap">';
   html+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--cream)">';
   html+='<input type="checkbox" id="recSelectAll" onchange="toggleSelectAllRecords(this.checked)" style="width:16px;height:16px;cursor:pointer"> 전체 선택';
   html+='</label>';
   html+='<span style="font-size:11px;color:var(--muted)" id="recSelectedCount">선택: 0건</span>';
   html+='<div style="flex:1"></div>';
+  html+='<button onclick="exportExcel(\''+activeTab+'\')" style="background:rgba(140,196,74,.12);border:1px solid var(--accent);color:var(--accent);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">📊 엑셀 내보내기</button>';
   html+='<button onclick="deleteSelectedRecords()" id="recDelSelBtn" disabled style="background:rgba(255,100,100,.15);border:1px solid rgba(255,100,100,.4);color:#ff8080;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;opacity:.5">🗑 선택 삭제</button>';
   html+='<button onclick="deleteAllRecords()" style="background:rgba(255,100,100,.08);border:1px solid rgba(255,100,100,.3);color:#ff8080;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer">🗑 전체 삭제</button>';
   html+='</div>';
@@ -2543,6 +2622,112 @@ function removeFromRegionAgg(rec){
   if(d.count===0){delete data[rec.region];}
   else {d.avg=Math.round(d.sum/d.count*10)/10;}
   saveRegionData(data);
+}
+
+/* ════ 엑셀 내보내기 (3번 작업) ════
+   SheetJS로 3개 시트가 들어간 .xlsx 파일 생성:
+   - 시트1: 개별 기록 (날짜, 지역, 착색률, 등급, 날씨 등 전체 컬럼)
+   - 시트2: 도별 통계 (도별 평균, 건수)
+   - 시트3: 전국 요약 (전체 평균, 총 건수, 일자별 추이) */
+function exportExcel(activeTab){
+  if(typeof XLSX==='undefined'){
+    toast('⚠️ 엑셀 라이브러리 로딩 중. 잠시 후 다시 시도하세요');
+    return;
+  }
+  var records=loadAllRecords();
+  if(!records.length){toast('내보낼 기록이 없습니다');return;}
+
+  /* 현재 탭에 따라 필터링 */
+  var filtered=(activeTab&&activeTab!=='all')?records.filter(function(r){return r.region===activeTab;}):records;
+  if(!filtered.length){toast('해당 탭에 기록이 없습니다');return;}
+
+  /* ── 시트 1: 개별 기록 ── */
+  var sheet1Data=[];
+  /* 헤더 */
+  sheet1Data.push(['ID','측정일','수확일','지역','상세주소','촬영방식','착색률(%)','등급','등급명','신뢰도(%)','측정점수','꼭지개수','일조시간(h)','평균최고기온(°)','평균최저기온(°)','평균기온(°)','총강수량(mm)']);
+  for(var i=0;i<filtered.length;i++){
+    var r=filtered[i];
+    var modeKr=r.mode==='both'?'상+하부 종합':r.mode==='bottom'?'하부만':'꼭지만';
+    var w=r.weather||{};
+    sheet1Data.push([
+      r.id, r.date, r.harvestDate||'', r.regionName||'', r.address||'',
+      modeKr, r.pct, r.grade||'', r.gradeName||'', r.conf||'', r.sc||'',
+      r.cnt||'',
+      (typeof w.sunHours!=='undefined')?w.sunHours:'',
+      w.avgMax!==undefined&&w.avgMax!==null?w.avgMax:'',
+      w.avgMin!==undefined&&w.avgMin!==null?w.avgMin:'',
+      w.avgAll!==undefined&&w.avgAll!==null?w.avgAll:'',
+      w.totalRain!==undefined&&w.totalRain!==null?w.totalRain:''
+    ]);
+  }
+  var ws1=XLSX.utils.aoa_to_sheet(sheet1Data);
+  /* 컬럼 폭 자동 조정 */
+  ws1['!cols']=[{wch:14},{wch:11},{wch:11},{wch:14},{wch:24},{wch:11},{wch:9},{wch:6},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:13},{wch:13},{wch:11},{wch:13}];
+
+  /* ── 시트 2: 도별 통계 ── */
+  var regionStats={};
+  for(var i=0;i<records.length;i++){
+    var r=records[i];
+    if(!r.region) continue;
+    if(!regionStats[r.region]){
+      regionStats[r.region]={name:r.regionName||r.region,count:0,sum:0,minPct:r.pct,maxPct:r.pct,sunSum:0,sunCnt:0,rainSum:0,rainCnt:0};
+    }
+    var s=regionStats[r.region];
+    s.count++; s.sum+=r.pct;
+    if(r.pct<s.minPct) s.minPct=r.pct;
+    if(r.pct>s.maxPct) s.maxPct=r.pct;
+    if(r.weather){
+      if(typeof r.weather.sunHours!=='undefined'){s.sunSum+=r.weather.sunHours;s.sunCnt++;}
+      if(typeof r.weather.totalRain!=='undefined'){s.rainSum+=r.weather.totalRain;s.rainCnt++;}
+    }
+  }
+  var sheet2Data=[['도/지역','측정건수','평균착색률(%)','최저(%)','최고(%)','평균일조시간(h)','평균강수량(mm)']];
+  var rkeys=Object.keys(regionStats).sort();
+  for(var ri=0;ri<rkeys.length;ri++){
+    var s=regionStats[rkeys[ri]];
+    sheet2Data.push([
+      s.name, s.count, Math.round(s.sum/s.count*10)/10,
+      s.minPct, s.maxPct,
+      s.sunCnt?Math.round(s.sunSum/s.sunCnt*10)/10:'',
+      s.rainCnt?Math.round(s.rainSum/s.rainCnt*10)/10:''
+    ]);
+  }
+  var ws2=XLSX.utils.aoa_to_sheet(sheet2Data);
+  ws2['!cols']=[{wch:18},{wch:10},{wch:14},{wch:10},{wch:10},{wch:16},{wch:14}];
+
+  /* ── 시트 3: 전국 요약 ── */
+  var totalSum=0,sunSumAll=0,sunCntAll=0,rainSumAll=0,rainCntAll=0;
+  for(var i=0;i<records.length;i++){
+    totalSum+=records[i].pct;
+    if(records[i].weather){
+      if(typeof records[i].weather.sunHours!=='undefined'){sunSumAll+=records[i].weather.sunHours;sunCntAll++;}
+      if(typeof records[i].weather.totalRain!=='undefined'){rainSumAll+=records[i].weather.totalRain;rainCntAll++;}
+    }
+  }
+  var sheet3Data=[
+    ['항목','값'],
+    ['총 측정 건수', records.length],
+    ['측정 지역 수', rkeys.length],
+    ['전국 평균 착색률(%)', Math.round(totalSum/records.length*10)/10],
+    ['전국 평균 일조시간(h)', sunCntAll?Math.round(sunSumAll/sunCntAll*10)/10:'—'],
+    ['전국 평균 강수량(mm)', rainCntAll?Math.round(rainSumAll/rainCntAll*10)/10:'—'],
+    ['내보낸 시각', new Date().toLocaleString('ko-KR')],
+    ['내보낸 범위', activeTab&&activeTab!=='all'?(filtered[0].regionName||activeTab):'전국'+'('+filtered.length+'건)']
+  ];
+  var ws3=XLSX.utils.aoa_to_sheet(sheet3Data);
+  ws3['!cols']=[{wch:24},{wch:30}];
+
+  /* 워크북 생성 + 저장 */
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws1,'개별 기록');
+  XLSX.utils.book_append_sheet(wb,ws2,'도별 통계');
+  XLSX.utils.book_append_sheet(wb,ws3,'전국 요약');
+
+  var ts=new Date().toISOString().slice(0,10);
+  var scope=activeTab&&activeTab!=='all'?(filtered[0].regionName||activeTab):'전국';
+  var filename='FujiGrade_기록_'+scope+'_'+ts+'.xlsx';
+  XLSX.writeFile(wb,filename);
+  toast('📊 엑셀 파일 다운로드: '+filename);
 }
 
 function setRecTab(tab){

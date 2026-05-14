@@ -1405,56 +1405,83 @@ function applyGPS(lat,lon,src,knownAddress){
     setBadge('주소 확인 중','var(--accent)');
   }
 
-  /* 역지오코딩 — 리/읍/면 우선 표시 */
-  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=ko&addressdetails=1&zoom=14',{mode:'cors',headers:{'Accept':'application/json'}})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      var a=d.address||{};
-      console.log('[Nominatim] 응답:', a);
-      /* 시/도 */
-      var sido=a.province||a.state||'';
-      /* 시/군/구 */
-      var sigungu=a.city||a.county||a.town||a.city_district||'';
-      /* 리/읍/면/동 — 리/마을 우선, 그 다음 읍/면, 마지막 동/구 */
-      var eupmyeondong=a.village||a.hamlet||a.neighbourhood||a.suburb||a.quarter||'';
-      /* town이 sigungu에 안 쓰였으면 town도 후보 */
-      if(!eupmyeondong && a.town && a.town!==sigungu) eupmyeondong=a.town;
-      /* 중복 제거 */
-      if(eupmyeondong===sigungu) eupmyeondong='';
-      var loc=(sido+' '+sigungu+' '+eupmyeondong).replace(/\s+/g,' ').trim();
-
-      /* display_name에서 추출 시도 (fallback) */
-      if(!loc && d.display_name){
-        /* "강원특별자치도 영월군 신일리, 12345" 형식 → 앞쪽 행정구역만 */
-        var parts=d.display_name.split(',').map(function(s){return s.trim();});
-        /* 우편번호/숫자만 있는 부분 제외 */
-        var addrParts=[];
-        for(var i=0;i<parts.length;i++){
-          if(/^\d/.test(parts[i])) continue; /* 숫자로 시작하면 스킵 */
-          if(parts[i]==='대한민국'||parts[i]==='South Korea') continue;
-          addrParts.push(parts[i]);
-        }
-        loc=addrParts.slice(0,3).reverse().join(' '); /* 한국 주소는 큰 단위→작은 단위 */
-      }
-
-      /* 그래도 비어있으면 좌표 (최후 수단) */
-      if(!loc) loc='위치 확인 불가';
-
-      currentAddress=loc;
-      /* 도 판별 재실행 */
-      var newRegion=detectRegion(lat,lon,loc);
-      if(newRegion!==currentRegion){
-        console.log('[Region] 위경도판별('+currentRegion+') → 주소판별('+newRegion+')로 변경');
-        currentRegion=newRegion;
-      }
-      setEV('envLoc',loc);
-      setBadge(loc.length>14?loc.slice(0,14)+'..':loc,'var(--accent)');
-      initKoreaMap();
-    }).catch(function(e){
-      console.error('[Nominatim] 실패:', e);
-      setEV('envLoc','주소 조회 실패');
+  /* 역지오코딩 — 리/읍/면 우선 + 다중 재시도 */
+  function reverseGeocode(lat,lon,attemptIdx){
+    if(attemptIdx>=3){
+      console.error('[Nominatim] 모든 시도 실패');
+      setEV('envLoc','주소 조회 실패 — 콘솔(F12) 확인');
       setBadge('주소 조회 실패','var(--warn)');
-    });
+      return;
+    }
+    /* 시도별 다른 파라미터 */
+    var attempts=[
+      {zoom:14,lang:'ko'},      /* 1차: 한글 + zoom 14 */
+      {zoom:18,lang:'ko'},      /* 2차: 한글 + zoom 18(더 상세) */
+      {zoom:14,lang:'ko,en'}    /* 3차: 한+영 동시 */
+    ];
+    var att=attempts[attemptIdx];
+    var url='https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&addressdetails=1&zoom='+att.zoom+'&accept-language='+att.lang;
+    console.log('[Nominatim] 시도 '+(attemptIdx+1)+'/3:', url);
+
+    fetch(url)
+      .then(function(r){
+        console.log('[Nominatim] HTTP:', r.status);
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(function(d){
+        console.log('[Nominatim] 전체 응답:', d);
+        if(d.error){
+          console.warn('[Nominatim] error 필드:', d.error);
+          reverseGeocode(lat,lon,attemptIdx+1);
+          return;
+        }
+        var a=d.address||{};
+        console.log('[Nominatim] address:', a);
+
+        var sido=a.province||a.state||a.region||'';
+        var sigungu=a.city||a.county||a.town||a.city_district||a.borough||'';
+        /* 리/읍/면 우선 */
+        var eupmyeondong=a.village||a.hamlet||a.neighbourhood||a.suburb||a.quarter||'';
+        if(!eupmyeondong && a.town && a.town!==sigungu) eupmyeondong=a.town;
+        if(eupmyeondong===sigungu) eupmyeondong='';
+        var loc=(sido+' '+sigungu+' '+eupmyeondong).replace(/\s+/g,' ').trim();
+
+        /* display_name 폴백 */
+        if(!loc && d.display_name){
+          var parts=d.display_name.split(',').map(function(s){return s.trim();});
+          var addrParts=[];
+          for(var i=0;i<parts.length;i++){
+            if(/^\d/.test(parts[i])) continue;
+            if(parts[i]==='대한민국'||parts[i]==='South Korea') continue;
+            addrParts.push(parts[i]);
+          }
+          loc=addrParts.slice(0,3).reverse().join(' ');
+        }
+
+        if(!loc){
+          console.warn('[Nominatim] '+(attemptIdx+1)+'차 빈 응답, 재시도');
+          reverseGeocode(lat,lon,attemptIdx+1);
+          return;
+        }
+
+        currentAddress=loc;
+        var newRegion=detectRegion(lat,lon,loc);
+        if(newRegion!==currentRegion){
+          console.log('[Region] '+currentRegion+' → '+newRegion+' (주소판별)');
+          currentRegion=newRegion;
+        }
+        setEV('envLoc',loc);
+        setBadge(loc.length>14?loc.slice(0,14)+'..':loc,'var(--accent)');
+        initKoreaMap();
+      })
+      .catch(function(e){
+        console.error('[Nominatim] '+(attemptIdx+1)+'차 실패:', e.message);
+        /* 네트워크 오류면 1초 후 재시도 */
+        setTimeout(function(){reverseGeocode(lat,lon,attemptIdx+1);},800);
+      });
+  }
+  reverseGeocode(lat,lon,0);
   /* 고도 */
   fetch('https://api.open-elevation.com/api/v1/lookup?locations='+lat+','+lon,{mode:'cors'})
     .then(function(r){return r.json();})
@@ -1540,15 +1567,27 @@ function renderWeatherSummary(days){
   var avgMax=maxTemps.length?Math.round(maxTemps.reduce(function(a,b){return a+b;},0)/maxTemps.length*10)/10:null;
   var avgMin=minTemps.length?Math.round(minTemps.reduce(function(a,b){return a+b;},0)/minTemps.length*10)/10:null;
   var avgAll=allTemps.length?Math.round(allTemps.reduce(function(a,b){return a+b;},0)/allTemps.length*10)/10:null;
-  /* 일일 평균 일조 시간 */
+  /* 일조량 — 일평균 + 2주 누적 합계 */
   var avgSunHours=sunshineDays>0?Math.round((sunshineTotal/sunshineDays/3600)*10)/10:null;
+  var totalSunHours=sunshineDays>0?Math.round((sunshineTotal/3600)*10)/10:null;
 
-  /* ★ 일조량 표시 변경: 맑은날수 → 일평균 일조시간 */
-  document.getElementById('wsSunDays').textContent=(avgSunHours!==null?avgSunHours+'h':'—');
+  /* 일조량 카드: 일평균 h + 2주 합계 h */
+  var sunEl=document.getElementById('wsSunDays');
+  if(sunEl){
+    if(avgSunHours!==null && totalSunHours!==null){
+      sunEl.innerHTML=avgSunHours+'h<span style="display:block;font-size:11px;opacity:0.7;margin-top:2px">/ 2주 '+totalSunHours+'h</span>';
+    } else {
+      sunEl.textContent='—';
+    }
+  }
   document.getElementById('wsAvgMax').textContent=(avgMax!==null?avgMax+'°':'—');
   document.getElementById('wsAvgMin').textContent=(avgMin!==null?avgMin+'°':'—');
   document.getElementById('wsAvgTemp').textContent=(avgAll!==null?avgAll+'°':'—');
   document.getElementById('wsTotalRain').textContent=Math.round(totalRain*10)/10+'mm';
+
+  /* 일조량 카드 라벨도 변경 */
+  var sunLabel=document.querySelector('#wsSunDays + .ws-lbl');
+  if(sunLabel) sunLabel.textContent='일평균 일조 / 2주합';
 
   var startD=days.time[0],endD=days.time[days.time.length-1];
   document.getElementById('wsSummaryTitle').textContent='2주 평균 ('+startD.slice(5)+' ~ '+endD.slice(5)+')';

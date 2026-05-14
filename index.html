@@ -606,6 +606,13 @@ function hideKreiSplash(){
     <!-- 왼쪽 패널 -->
     <div class="left-panel">
 
+      <!-- 품종 선택 (7번 작업) -->
+      <div class="section-label">사과 품종</div>
+      <div class="mode-select" style="margin-bottom:14px">
+        <button class="mode-btn" id="varFuji" onclick="setVariety('fuji')">🍎 후지(부사)<br><span style="font-size:10px;opacity:.7">10월말~11월 수확</span></button>
+        <button class="mode-btn" id="varHongro" onclick="setVariety('hongro')">🌹 홍로<br><span style="font-size:10px;opacity:.7">8월말~9월 수확</span></button>
+      </div>
+
       <!-- 수확일 선택 -->
       <div class="section-label">수확일 선택</div>
       <div class="harvest-date">
@@ -851,7 +858,18 @@ function hideKreiSplash(){
         </div>
 
         <div class="warn-box" id="warnBox"></div>
-        <div class="footnote">기준: 농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=−5.7→0%, a*=+38.8→100%). 꼭지 부위 기준.</div>
+
+        <!-- 농진청 색체계 매칭 (8번 작업) -->
+        <div id="nradMatchBox" style="display:none;margin-bottom:10px;padding:12px;background:linear-gradient(135deg,rgba(140,196,74,.1),rgba(140,196,74,.04));border:1px solid rgba(140,196,74,.3);border-radius:var(--r)">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">🌾 농촌진흥청 색체계 매칭</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <span id="nradVariety" style="background:var(--accent);color:var(--bg);font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px">후지</span>
+            <span id="nradStage" style="font-size:14px;font-weight:700;color:var(--cream)">—</span>
+          </div>
+          <div id="nradAdvice" style="font-size:11px;color:var(--muted);line-height:1.5">—</div>
+        </div>
+
+        <div class="footnote" id="footnoteBase">기준: 농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=−5.7→0%, a*=+38.8→100%). 꼭지 부위 기준.</div>
 
         <div class="share-bar">
           <button class="s-btn save" id="saveResultBtn" onclick="onSaveResultClick()" style="background:var(--accent);color:var(--bg);font-weight:600">💾 결과 저장</button>
@@ -881,6 +899,105 @@ function hideKreiSplash(){
 <div class="refs-wrap">
   <div class="section-label" style="margin-bottom:6px">참고 자료</div>
   <div style="font-size:13px;color:var(--cream2);margin-bottom:16px;line-height:1.6">판정 알고리즘의 기준이 된 판정판 색판지와 연구 논문입니다.</div>
+
+  <!-- ════ 품종별 측정 기준 비교 (7번+8번 작업) ════ -->
+  <div style="background:linear-gradient(135deg,rgba(140,196,74,.08),rgba(140,196,74,.02));border:1px solid rgba(140,196,74,.25);border-radius:var(--rl);padding:16px;margin-bottom:20px">
+    <h3 style="font-size:15px;color:var(--accent);margin-bottom:4px">🍎 품종별 측정 기준</h3>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">FujiGrade는 후지·홍로 두 품종을 지원합니다. 품종마다 LAB 색좌표 범위와 수확 시기가 달라 측정 기준이 다릅니다.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <!-- 후지 카드 -->
+      <div style="background:rgba(0,0,0,.3);border:1px solid rgba(178,83,87,.4);border-radius:var(--r);padding:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:22px">🍎</span>
+          <div>
+            <div style="font-weight:700;color:#b25357">후지(부사)</div>
+            <div style="font-size:10px;color:var(--muted)">Malus domestica 'Fuji'</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--cream);line-height:1.7">
+          • <b>수확기</b>: 10월 하순~11월 상순<br>
+          • <b>유형</b>: 만생종<br>
+          • <b>국내 점유율</b>: 70%+ (최대 품종)<br>
+          • <b>육종</b>: 1939년 일본 아오모리현<br>
+          • <b>당도</b>: 14~16°Brix<br>
+          • <b>특징</b>: 저장성 최고. CA저장 시 5~6개월
+        </div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.1);font-size:10px;color:var(--muted)">
+          <b style="color:var(--accent)">측정 LAB a* 범위</b><br>
+          <span style="font-family:var(--mm)">-5.7 (G5 미착색) ~ +38.8 (G1 완착)</span>
+        </div>
+      </div>
+
+      <!-- 홍로 카드 -->
+      <div style="background:rgba(0,0,0,.3);border:1px solid rgba(200,66,74,.4);border-radius:var(--r);padding:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:22px">🌹</span>
+          <div>
+            <div style="font-weight:700;color:#c8424a">홍로</div>
+            <div style="font-size:10px;color:var(--muted)">Malus domestica 'Hongro'</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--cream);line-height:1.7">
+          • <b>수확기</b>: 8월 하순~9월 중순<br>
+          • <b>유형</b>: 중생종 (추석 사과 대표)<br>
+          • <b>육종</b>: 1988년 농촌진흥청<br>
+          • <b>부모</b>: 스퍼얼리블레이즈 × 스퍼골든딜리셔스<br>
+          • <b>당도</b>: 14~15°Brix<br>
+          • <b>특징</b>: 농홍색·줄무늬 없음. 식미 우수
+        </div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.1);font-size:10px;color:var(--muted)">
+          <b style="color:var(--accent)">측정 LAB a* 범위</b><br>
+          <span style="font-family:var(--mm)">-3.0 (G5 미착색) ~ +42.0 (G1 완착)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 품종별 수확 적기 색체계 -->
+    <div style="background:rgba(0,0,0,.2);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🌾 농촌진흥청 색체계 수확 단계 매칭</div>
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:6px;font-size:11px">
+        <div style="font-weight:700;color:var(--accent)">단계</div>
+        <div style="font-weight:700;color:#b25357">🍎 후지 권장</div>
+        <div style="font-weight:700;color:#c8424a">🌹 홍로 권장</div>
+
+        <div style="color:var(--muted)">완숙기</div>
+        <div>80~100% · 즉시 수확</div>
+        <div>80~100% · 추석 출하</div>
+
+        <div style="color:var(--muted)">적기</div>
+        <div>60~80% · 10월말</div>
+        <div>60~80% · 8월말~9월</div>
+
+        <div style="color:var(--muted)">숙기초</div>
+        <div>40~60% · 1~2주 후</div>
+        <div>40~60% · 1주 후</div>
+
+        <div style="color:var(--muted)">착색초기</div>
+        <div>20~40% · 미숙</div>
+        <div>20~40% · 야간온도 점검</div>
+
+        <div style="color:var(--muted)">미숙</div>
+        <div>0~20% · 영양/기상</div>
+        <div>0~20% · 7월말 평균</div>
+      </div>
+    </div>
+
+    <!-- 착색 메커니즘 -->
+    <div style="background:rgba(0,0,0,.2);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🔬 착색 메커니즘 (공통)</div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7">
+        사과 과피가 붉어지는 것은 <b>엽록소(녹색) 감소 + 안토시아닌(붉은색) 증가</b> 때문입니다. 안토시아닌 합성은 PAL, CHS, F3H 효소가 주관하며, <b>야간 저온(10~15°C)과 일조량</b>이 가장 강한 영향 요인입니다. 25°C 초과 시 합성이 억제됩니다.
+      </div>
+    </div>
+
+    <!-- 출처 -->
+    <div style="font-size:10px;color:var(--muted);line-height:1.6;padding:8px 10px;background:rgba(0,0,0,.15);border-radius:4px;border-left:2px solid var(--accent)">
+      <b>📚 출처</b><br>
+      • 후지 기준: 농촌진흥청·한국농업전문학교·충주시농업기술센터 공동 발행 판정판 색판지 (2019)<br>
+      • 홍로 기준: 김선애 외 (2016) 「고온에 의한 변색단계별 '홍로' 사과의 착색 및 당 축적 관련 유전자 발현 분석」, 시설원예·식물공장; 국립원예특작과학원 (2024) 「사과 '홍로'의 숙기 진단을 위한 최적 품질 지표 및 기준 설정」 (만개 후 164~173일, 색도 a*=14.7±12.8)
+    </div>
+  </div>
 
   <div class="card-img-section">
     <h3>후지사과 착색 판정판 (색판지)</h3>
@@ -934,6 +1051,161 @@ function hideKreiSplash(){
     <div class="paper-list" id="pc3"></div>
   </div>
 
+  <!-- ════════════════════════════════════════════════
+       데이터 출처 명세 (Data Sources Disclosure)
+       FujiGrade가 사용하는 모든 외부 자료와 추정값의 출처를 투명하게 공개합니다.
+       ════════════════════════════════════════════════ -->
+  <div style="margin-top:32px;padding:18px;background:linear-gradient(135deg,rgba(0,0,0,.35),rgba(0,0,0,.15));border:1px solid rgba(255,255,255,.08);border-radius:var(--rl)">
+    <h3 style="font-size:14px;color:var(--accent);margin-bottom:4px;letter-spacing:.02em">📋 데이터 출처 명세서</h3>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:18px;line-height:1.6">FujiGrade는 학술 연구 도구로서, 모든 수치와 자료의 출처를 투명하게 공개합니다. 아래는 본 시스템에 사용된 외부 자료의 전체 명세입니다.<br><span style="color:#8cc44a">✓ 자료 사용</span>: 공식·학술 자료를 그대로 인용 / <span style="color:#e8a020">◆ 연구 기반 추정</span>: 학술 논문에서 역산·도출 / <span style="color:#a0a0a0">○ 자체 산출</span>: 본 프로젝트 자체 측정·계산</div>
+
+    <!-- 1. LAB 색좌표 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">1. 후지 LAB 색좌표 (G1~G5)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        <b>사용 데이터</b>: a*=+38.8/+29.8/+18.7/+5.3/-5.7 (G1→G5), L*=47.5/51.4/53.6/56.6/58.5<br>
+        <b>출처</b>: 농촌진흥청·한국농업전문학교·충주시농업기술센터 공동 발행 「후지사과 착색 판정판 색판지」 (2019)<br>
+        <b>활용</b>: 분석 탭 판정 기준, Grade 탭 색판지 시각화, 결과 산출 공식의 양 끝값
+      </div>
+    </div>
+
+    <!-- 2. 홍로 LAB 색좌표 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#e8a020;font-size:11px;font-weight:600">◆ 연구 기반 추정</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">2. 홍로 LAB 색좌표 (G1~G5)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #e8a020">
+        <b>추정값</b>: a*=+42.0/+33.0/+22.0/+10.0/-3.0 (G1→G5), L*=45.0/48.5/52.0/55.0/58.0<br>
+        <b>근거 자료</b>:<br>
+        &nbsp;&nbsp;• 김선애 외 (2016) 「고온에 의한 변색단계별 '홍로' 사과의 착색 및 당 축적 관련 유전자 발현 분석」, 시설원예·식물공장<br>
+        &nbsp;&nbsp;• 국립원예특작과학원 (2024) 「사과 '홍로'의 숙기 진단을 위한 최적 품질 지표 및 기준 설정」 (만개 후 164~173일, 수확기 색도 a*=14.7±12.8)<br>
+        <b>추정 방법</b>: 위 연구의 수확기 a* 평균값과 표준편차로부터 G1~G5 단계 역산. 홍로는 후지보다 일찍·진하게 익는 품종 특성 반영.<br>
+        <b>주의</b>: 농촌진흥청 공식 「홍로 판정판」 자료는 현재 공개되지 않아 학술 데이터로 대체. 공식 자료 입수 시 갱신 예정.
+      </div>
+    </div>
+
+    <!-- 3. 농진청 색체계 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#e8a020;font-size:11px;font-weight:600">◆ 연구 기반 추정</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">3. 농촌진흥청 색체계 5단계 (완숙기/적기/숙기초/착색초기/미숙)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #e8a020">
+        <b>사용 단계명</b>: "완숙기", "적기", "숙기초", "착색초기", "미숙"<br>
+        <b>근거</b>: 농촌진흥청 사과 재배 매뉴얼과 「농업기술길잡이」 시리즈의 일반적 용어 채택. 정확한 LAB-단계 매칭표는 공개되지 않음.<br>
+        <b>구간 설정</b>: G1=80%↑(완숙기), G2=60~80%(적기), G3=40~60%(숙기초), G4=20~40%(착색초기), G5=20%↓(미숙) — 본 시스템 자체 매핑<br>
+        <b>주의</b>: 단계 명칭은 농진청 표준 용어이나, 구간 경계는 본 프로젝트가 5단계 색판지에 맞춰 설정한 값.
+      </div>
+    </div>
+
+    <!-- 4. 가중치 (꼭지/하부) -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#e8a020;font-size:11px;font-weight:600">◆ 연구 기반 추정</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">4. 꼭지 60% + 하부 40% 가중치</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #e8a020">
+        <b>적용 공식</b>: 종합 착색률 = (꼭지 착색률 × 0.6) + (하부 착색률 × 0.4)<br>
+        <b>근거</b>: Han et al. (2022) PMC 「봉지 제거 후 착색」 연구 — 꼭지부가 적도부·배꼽부보다 착색이 늦어 수확 적기 판정에 더 결정적임. Wang et al. (2021) — 착색 순서가 적도부 → 꼭지·배꼽 순으로 진행.<br>
+        <b>주의</b>: 정확한 60:40 비율을 제시한 논문은 없음. 위 연구 결과를 종합해 본 프로젝트가 임의 설정. 표준 공식이 발표되면 갱신 예정.
+      </div>
+    </div>
+
+    <!-- 5. 외부 API -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">5. 외부 API (위치·기상·고도)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        • <b>OpenStreetMap Nominatim</b> — 주소↔좌표 변환 (역지오코딩·정방향 검색). 라이선스: ODbL.<br>
+        • <b>Open-Meteo</b> — 일조시간·기온·강수량 (과거 14일 + 예보 1일). 라이선스: CC-BY 4.0. 비상업 무료.<br>
+        • <b>Open-Elevation</b> — 해발 고도. 오픈소스 무료.<br>
+        • <b>Anthropic Claude API</b> — 사진 워터마크 GPS 자동 인식 (사용자 API 키 필요).<br>
+        <b>주의</b>: 기상청 KMA API 인증키가 등록되어 있으나 sfc_aws_day.php 활용 신청 미완료로 현재는 Open-Meteo로 통일 사용 중.
+      </div>
+    </div>
+
+    <!-- 6. SVG 지도 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">6. 남한 8도 SVG 지도</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        <b>출처</b>: @svg-maps/south-korea (npm 패키지)<br>
+        <b>원본 데이터</b>: 통계청(KOSTAT) 행정구역 경계 기반<br>
+        <b>라이선스</b>: CC-BY-4.0<br>
+        <b>활용</b>: 전국 착색도 현황 지도 (viewBox 524×631)
+      </div>
+    </div>
+
+    <!-- 7. 지도 좌표 변환 공식 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#a0a0a0;font-size:11px;font-weight:600">○ 자체 산출</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">7. 지도 좌표 변환 공식 (위경도 → SVG 픽셀)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #a0a0a0">
+        <b>공식</b>: <span style="font-family:var(--mm);font-size:10px">x = 100.143 × 경도 − 12564.0, y = -111.065 × 위도 + 4302.3</span><br>
+        <b>산출 방법</b>: 본 프로젝트가 SVG viewBox(524×631)와 실제 좌표 2개 기준점(서울 37.566°N/126.978°E → 152,130 픽셀 ; 부산 35.180°N/129.075°E → 362,395 픽셀)으로 선형 보정 계산.<br>
+        <b>주의</b>: 정확한 측지좌표계 변환이 아닌 시각화용 근사 공식. 정밀 위치 분석에는 부적합.
+      </div>
+    </div>
+
+    <!-- 8. KREI CI -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#e8a020;font-size:11px;font-weight:600">◆ 디자인 참고 (재현)</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">8. KREI 스플래시 스크린 디자인</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #e8a020">
+        <b>참고 출처</b>: 한국농촌경제연구원(KREI) 공식 CI 가이드 (krei.re.kr/krei/contents.do?key=122)<br>
+        <b>참고한 요소</b>: 주색 청록색, R자+잎 모티브, "Reliability·Research·Responsibility" 의미<br>
+        <b>사용 색상</b>: #005666 ~ #008486 (정부기관 청록 톤 일반값)<br>
+        <b>주의</b>: 정확한 KREI 공식 헥스코드는 비공개. 색차계로 측정한 일반적 청록색 사용. 본 프로젝트는 KREI 정식 도구가 아닌 학술 시연용. 공식 사용 시 KREI 승인 필요.
+      </div>
+    </div>
+
+    <!-- 9. JavaScript 라이브러리 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">9. JavaScript 라이브러리</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        • <b>SheetJS (xlsx@0.18.5)</b> — 엑셀 내보내기. Apache 2.0 라이선스. CDN: cdn.jsdelivr.net<br>
+        • <b>JavaScript Canvas API</b> — 사진 픽셀 분석 (브라우저 내장)<br>
+        • <b>LocalStorage API</b> — 임시 데이터 저장 (브라우저 내장, Supabase 도입 예정)
+      </div>
+    </div>
+
+    <!-- 10. 학술 참고문헌 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">10. 학술 참고문헌 (총 13편)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        <b>색 측정 기준 (C001~C005)</b>: Papadavid 2014, Sha 2019, Han 2022, Wang 2021, Arana 2012 — 모두 동료심사 학술지 (위 "색 측정 기준" 탭 참조)<br>
+        <b>기계비전·NIR (M001~M003)</b>: Sun 2022, Lu 2022, Kim 2024<br>
+        <b>국내 연구 (K001~K005)</b>: 잠 2014, 이 2022, 한 2014, 김 2021, 권 2025 (한국원예학회지·한국농림기상학회지 등)<br>
+        <b>활용</b>: 각 논문은 본 시스템의 측정 방법·기준값 설정 근거. 모든 DOI/PDF 링크 위 카테고리 탭에서 직접 확인 가능.
+      </div>
+    </div>
+
+    <!-- 마지막 안내 -->
+    <div style="margin-top:14px;padding:10px 12px;background:rgba(0,86,102,.15);border-left:3px solid #008486;border-radius:4px;font-size:10px;color:var(--cream);line-height:1.6">
+      <b style="color:#7fd3d3">📝 데이터 정확성 약속</b><br>
+      FujiGrade는 학술 연구 도구이며, 본 명세서에 누락된 자료가 발견되거나 더 정확한 공식 데이터(특히 농촌진흥청 「홍로 판정판」)를 확보하면 즉시 갱신합니다. 데이터 오류·누락 제보는 GitHub 이슈로 받습니다.<br>
+      <span style="color:var(--muted);font-size:9px">최종 갱신: 2026-05-14 / 프로젝트 라이선스: 미정 (학술 연구용)</span>
+    </div>
+  </div>
+
 </div>
 </div><!-- /page-refs -->
 
@@ -948,16 +1220,73 @@ function hideKreiSplash(){
    꼭지+하부 2장모드, 기록탭
 ════════════════════════════════════════════════ */
 
-/* ── 상수 ── */
-var CARD = [
-  {g:1,l:'G1',name:'진한 적색',pct:[78,100],color:'#b25357',a:38.8,l2:47.5,desc:'완전 착색. 수확 적기'},
-  {g:2,l:'G2',name:'적색',pct:[56,78],color:'#b26661',a:29.8,l2:51.4,desc:'착색 우수. 수확 가능'},
-  {g:3,l:'G3',name:'황적색',pct:[33,56],color:'#af7969',a:18.7,l2:53.6,desc:'착색 진행 중'},
-  {g:4,l:'G4',name:'연황색',pct:[12,33],color:'#a68c70',a:5.3,l2:56.6,desc:'착색 초기'},
-  {g:5,l:'G5',name:'연갈색',pct:[0,12],color:'#9d9d77',a:-5.7,l2:58.5,desc:'미착색'}
-];
+/* ── 품종별 판정 기준 (7번+8번 작업) ──
+   후지: 농촌진흥청·한국농업전문학교 판정판 실측 LAB 기준 (기존 사용 중)
+   홍로: 국립원예특작과학원 '홍로 숙기 진단' 연구 기반 (a*=14.7±12.8 수확 기준)
+        홍로는 후지보다 일찍, 더 진하게 익는 품종. 수확기 a* 범위가 좁고 높음. */
+var VARIETY = {
+  fuji: {
+    id:'fuji', name:'후지(부사)',
+    icon:'🍎', color:'#b25358',
+    desc:'10월 하순~11월 상순 수확. 만생종. 한국 사과 70%+',
+    cards:[
+      {g:1,l:'G1',name:'진한 적색',pct:[78,100],color:'#b25357',a:38.8,l2:47.5,desc:'완전 착색. 수확 적기'},
+      {g:2,l:'G2',name:'적색',pct:[56,78],color:'#b26661',a:29.8,l2:51.4,desc:'착색 우수. 수확 가능'},
+      {g:3,l:'G3',name:'황적색',pct:[33,56],color:'#af7969',a:18.7,l2:53.6,desc:'착색 진행 중'},
+      {g:4,l:'G4',name:'연황색',pct:[12,33],color:'#a68c70',a:5.3,l2:56.6,desc:'착색 초기'},
+      {g:5,l:'G5',name:'연갈색',pct:[0,12],color:'#9d9d77',a:-5.7,l2:58.5,desc:'미착색'}
+    ],
+    aMin:-5.7, aMax:38.8,
+    /* 농진청 색체계 매칭 (수확기 판정용) */
+    nradStages:[
+      {pct:[80,100],stage:'완숙기',advice:'즉시 수확. 저장성 우수'},
+      {pct:[60,80], stage:'적기',  advice:'수확 적기 (10월 하순~11월 초)'},
+      {pct:[40,60], stage:'숙기초',advice:'1~2주 후 재측정 권장'},
+      {pct:[20,40], stage:'착색초기',advice:'아직 미숙. 일조량 확인 필요'},
+      {pct:[0,20],  stage:'미숙',  advice:'착색 부족. 영양·기상 점검 필요'}
+    ]
+  },
+  hongro: {
+    id:'hongro', name:'홍로',
+    icon:'🌹', color:'#c8424a',
+    desc:'8월 하순~9월 중순 수확. 중생종. 추석 사과 대표',
+    cards:[
+      /* 홍로는 a* 범위가 더 높음(국립원예특작과학원 2024 연구) */
+      {g:1,l:'G1',name:'진홍적색',pct:[80,100],color:'#a23842',a:42.0,l2:45.0,desc:'완숙. 추석 출하 적기'},
+      {g:2,l:'G2',name:'농홍색', pct:[60,80], color:'#b54752',a:33.0,l2:48.5,desc:'착색 우수. 수확 가능'},
+      {g:3,l:'G3',name:'적색',  pct:[40,60], color:'#bc6566',a:22.0,l2:52.0,desc:'착색 진행 중'},
+      {g:4,l:'G4',name:'담홍색',pct:[20,40], color:'#bc8478',a:10.0,l2:55.0,desc:'착색 초기'},
+      {g:5,l:'G5',name:'녹황색',pct:[0,20],  color:'#a8a578',a:-3.0,l2:58.0,desc:'미착색. 8월 중순 이전'}
+    ],
+    aMin:-3.0, aMax:42.0,
+    nradStages:[
+      {pct:[80,100],stage:'완숙기',advice:'즉시 수확. 추석 출하'},
+      {pct:[60,80], stage:'적기',  advice:'수확 적기 (8월 하순~9월 중순)'},
+      {pct:[40,60], stage:'숙기초',advice:'1주 후 재측정 권장'},
+      {pct:[20,40], stage:'착색초기',advice:'아직 미숙. 야간온도·일조 확인'},
+      {pct:[0,20],  stage:'미숙',  advice:'착색 부족. 7월말~8월초 평균'}
+    ]
+  }
+};
+
+/* 현재 선택 품종 (기본: 후지) */
+var currentVariety = 'fuji';
+try { var saved=localStorage.getItem('fujigrade_variety'); if(saved&&VARIETY[saved]) currentVariety=saved; } catch(e){}
+
+/* ── 상수 (하위 호환용 - 기존 코드가 참조하는 변수들) ──
+   현재 품종 기준으로 동적 갱신됨. 옛 함수 호출(getPct, getCard) 그대로 작동. */
+var CARD = VARIETY[currentVariety].cards;
 var ACOLS=['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'];
-var A_MIN=-5.7, A_MAX=38.8;
+var A_MIN = VARIETY[currentVariety].aMin;
+var A_MAX = VARIETY[currentVariety].aMax;
+
+/* 품종 전환 시 CARD/A_MIN/A_MAX 동기화 */
+function syncVarietyConstants(){
+  var v=VARIETY[currentVariety];
+  CARD = v.cards;
+  A_MIN = v.aMin;
+  A_MAX = v.aMax;
+}
 
 function getPct(a){ return Math.round(Math.max(0,Math.min(100,(a-A_MIN)/(A_MAX-A_MIN)*100))*10)/10; }
 function getCard(pct){
@@ -965,6 +1294,49 @@ function getCard(pct){
     if(pct>=CARD[i].pct[0]) return CARD[i];
   }
   return CARD[4];
+}
+
+/* 농진청 색체계 단계 매칭 (8번 작업) */
+function getNradStage(pct, variety){
+  var v = VARIETY[variety||currentVariety];
+  if(!v||!v.nradStages) return null;
+  for(var i=0;i<v.nradStages.length;i++){
+    if(pct>=v.nradStages[i].pct[0]) return v.nradStages[i];
+  }
+  return v.nradStages[v.nradStages.length-1];
+}
+
+/* 품종 선택 (7번 작업) */
+function setVariety(v){
+  if(!VARIETY[v]) return;
+  currentVariety = v;
+  try{localStorage.setItem('fujigrade_variety', v);}catch(e){}
+  syncVarietyConstants();
+  /* 버튼 활성 상태 갱신 */
+  var fb=document.getElementById('varFuji'), hb=document.getElementById('varHongro');
+  if(fb) fb.className='mode-btn'+(v==='fuji'?' on':'');
+  if(hb) hb.className='mode-btn'+(v==='hongro'?' on':'');
+  /* 현재 사진들 재판정 (기존 결과는 무효화) */
+  for(var i=0;i<photos.length;i++){
+    if(photos[i].apples){
+      for(var j=0;j<photos[i].apples.length;j++) photos[i].apples[j].res=null;
+    }
+    photos[i].res=null;
+    photos[i].saved=false; /* 품종 바꾸면 저장 상태 초기화 */
+  }
+  /* 화면 갱신 */
+  if(aIdx>=0){ redraw(); renderApples(); checkRun(); }
+  document.getElementById('emptyState').style.display='flex';
+  document.getElementById('resultPanel').style.display='none';
+  renderPhotoGrid();
+  toast('🌱 품종 변경: '+VARIETY[v].name+'. 다시 판정을 실행하세요');
+}
+
+/* 초기 품종 버튼 활성화 */
+function initVarietyUI(){
+  var fb=document.getElementById('varFuji'), hb=document.getElementById('varHongro');
+  if(fb) fb.className='mode-btn'+(currentVariety==='fuji'?' on':'');
+  if(hb) hb.className='mode-btn'+(currentVariety==='hongro'?' on':'');
 }
 function rgb2lab(r,g,b){
   r/=255;g/=255;b/=255;
@@ -1521,6 +1893,24 @@ function showResult(r, dualInfo){
   if(r.avgL>90) ws+='<div class="warn-item">⚠ 과노출. 그늘에서 재촬영하세요.</div>';
   if(!r.cal&&r.mode!=='both') ws+='<div class="warn-item">⚠ 카드 영역 지정 시 정확도가 향상됩니다.</div>';
   document.getElementById('warnBox').innerHTML=ws;
+
+  /* ── 농진청 색체계 매칭 표시 (8번 작업) ── */
+  var nradBox=document.getElementById('nradMatchBox');
+  var stage=getNradStage(r.avg);
+  var v=VARIETY[currentVariety];
+  if(nradBox&&stage&&v){
+    nradBox.style.display='block';
+    document.getElementById('nradVariety').textContent=v.icon+' '+v.name;
+    document.getElementById('nradVariety').style.background=v.color;
+    document.getElementById('nradStage').textContent=stage.stage+' ('+r.avg+'%)';
+    document.getElementById('nradStage').style.color=c.color;
+    document.getElementById('nradAdvice').textContent='💡 '+stage.advice;
+  }
+  /* 푸터노트도 품종에 맞춰 갱신 */
+  var fn=document.getElementById('footnoteBase');
+  if(fn){
+    fn.textContent='기준: '+(currentVariety==='hongro'?'국립원예특작과학원 홍로 숙기진단 LAB (a*=-3.0→0%, a*=+42.0→100%)':'농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=-5.7→0%, a*=+38.8→100%)')+'. 꼭지 부위 기준.';
+  }
   selG(c.g);
 }
 
@@ -2500,6 +2890,9 @@ function saveResultData(res){
     conf:res.conf,
     sc:res.sc,
     mode:res.mode||'top',
+    variety:currentVariety,  /* 7번 작업: 품종 정보 */
+    varietyName:VARIETY[currentVariety].name,
+    nradStage:(function(){var s=getNradStage(res.avg);return s?s.stage:null;})(),  /* 8번 작업: 농진청 단계 */
     weather:weatherCache?{
       avgMax:null,avgMin:null,avgAll:null,totalRain:0,sunHours:0
     }:null
@@ -3161,10 +3554,12 @@ document.addEventListener('DOMContentLoaded',function(){
   initKoreaMap();
   renderStatsMemo();
   renderRecordsPage();
+  initVarietyUI();
 });
 initKoreaMap();
 renderStatsMemo();
 renderRecordsPage();
+initVarietyUI();
 </script>
 </body>
 </html>

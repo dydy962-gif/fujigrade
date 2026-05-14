@@ -552,16 +552,9 @@ nav{
 function hideKreiSplash(){
   var s=document.getElementById('kreiSplash');
   if(s){s.classList.add('fade-out');setTimeout(function(){s.style.display='none';},600);}
-  try{localStorage.setItem('kreiSplashSeen',Date.now());}catch(e){}
 }
-/* 2.5초 후 자동 숨김. 단, 같은 날 두 번째부터는 1초만 보여줌 */
-(function(){
-  var lastSeen=0;
-  try{lastSeen=parseInt(localStorage.getItem('kreiSplashSeen')||'0',10);}catch(e){}
-  var today=new Date();today.setHours(0,0,0,0);
-  var seenToday=lastSeen>today.getTime();
-  setTimeout(hideKreiSplash, seenToday?1000:2800);
-})();
+/* 항상 2.5초 — 자연스러운 시간감. 사용자가 빠르게 넘어가고 싶으면 '건너뛰기' 버튼 */
+setTimeout(hideKreiSplash, 2500);
 </script>
 
 <!-- 프로토콜 진단 배너 - file:// 환경 자동 경고 -->

@@ -1901,24 +1901,23 @@ function readGPSTags(d,gpsOff,le,base){
   return{lat:lat,lon:lon};
 }
 
-/* ── 업로드 즉시 자동 스캔 ── */
+/* ── 업로드 즉시 자동 스캔 ──
+   [정책 변경 2026-05-14] 워터마크 우선 (B-A안)
+   1) AI Vision으로 사진 안의 워터마크 좌표/주소를 먼저 읽음 (가장 신뢰)
+   2) AI 실패 시 EXIF GPS로 폴백
+   3) 둘 다 없으면 사용자 직접 입력 유도 */
 function autoScanPhoto(photoObj,idx){
+  /* EXIF는 백그라운드로 동시 추출 (폴백용으로만 저장) */
   if(photoObj.file){
     extractEXIF(photoObj.file,function(lat,lon){
       if(lat&&lon){
-        /* ★ 사진별 GPS 저장 */
-        photoObj.gps={lat:lat,lon:lon,source:'EXIF',address:null};
-        photoObj.gpsScanned=true;
-        /* 현재 선택된 사진이면 즉시 적용 */
-        if(idx===aIdx) applyGPS(lat,lon,'사진 EXIF');
-        toast('📍 사진 #'+(idx+1)+' EXIF GPS 인식');
-      } else {
-        scanWithClaudeVision(photoObj,idx);
+        photoObj.exifGps={lat:lat,lon:lon}; /* 폴백용 */
+        console.log('[EXIF] 사진 #'+(idx+1)+' EXIF GPS:',lat,lon,'(폴백용 보관)');
       }
     });
-  } else {
-    scanWithClaudeVision(photoObj,idx);
   }
+  /* AI Vision은 항상 호출 (워터마크 우선) */
+  scanWithClaudeVision(photoObj,idx);
 }
 
 function scanWithClaudeVision(photoObj,idx){
@@ -1926,6 +1925,21 @@ function scanWithClaudeVision(photoObj,idx){
   var mimeType=photoObj.url.split(';')[0].split(':')[1]||'image/jpeg';
   var badge=document.getElementById('envBadge');
   if(badge&&idx===aIdx) badge.textContent='🔍 AI 스캔 중... ('+(idx+1)+')';
+
+  /* ── AI 실패 시 EXIF 폴백 함수 ── */
+  function fallbackToEXIF(reason){
+    console.warn('[AI] 사진 #'+(idx+1)+' 워터마크 인식 실패('+reason+'). EXIF 폴백 시도.');
+    if(photoObj.exifGps){
+      var ex=photoObj.exifGps;
+      photoObj.gps={lat:ex.lat,lon:ex.lon,source:'EXIF',address:null};
+      photoObj.gpsScanned=true;
+      if(idx===aIdx) applyGPS(ex.lat,ex.lon,'사진 EXIF');
+      toast('📍 사진 #'+(idx+1)+' EXIF GPS 사용 (워터마크 못 읽음)');
+    } else {
+      if(badge&&idx===aIdx) badge.textContent='위치 미설정';
+    }
+  }
+
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -1936,7 +1950,7 @@ function scanWithClaudeVision(photoObj,idx){
         role:'user',
         content:[
           {type:'image',source:{type:'base64',media_type:mimeType,data:base64}},
-          {type:'text',text:'이 이미지를 분석해서 JSON으로만 답하세요. 분석: 1) GPS 좌표 또는 한국 주소(읍/면/동 단위까지 최대한 상세히), 2) 사과 꼭지 위치(이미지 상대 0~1). 형식: {"lat":숫자|null,"lon":숫자|null,"addr":"시도 시군구 읍면동"|null,"stems":[{"x":0~1,"y":0~1}]}'}
+          {type:'text',text:'이미지에서 다음을 추출해서 JSON으로만 답하세요(다른 텍스트 금지).\n\n[1] 좌표/주소 추출 — 우선순위:\n  (a) 이미지에 명시적으로 적힌 GPS 좌표(예: "35.675841°N, 127.560937°E" 같은 워터마크 텍스트)가 있으면 그 좌표를 정확히 그대로 lat/lon에 넣으세요. 한 자리도 틀리면 안 됨.\n  (b) 좌표가 없고 한국 주소 텍스트(예: "전북특별자치도 음신길 55625")가 보이면 addr에 그대로 넣으세요.\n  (c) 좌표/주소가 전혀 안 보이면 모두 null.\n  ※ 사진 속 워터마크/오버레이/도장 텍스트를 글자 단위로 읽으세요. 추측 금지.\n\n[2] 사과 꼭지 위치(이미지 상대 좌표 0~1) — 최대 5개.\n\n형식: {"lat":숫자|null,"lon":숫자|null,"addr":"원문 그대로"|null,"stems":[{"x":0~1,"y":0~1}]}'}
         ]
       }]
     })
@@ -1944,17 +1958,20 @@ function scanWithClaudeVision(photoObj,idx){
   .then(function(r){return r.json();})
   .then(function(d){
     var txt=(d.content&&d.content[0]&&d.content[0].text)?d.content[0].text:'';
+    console.log('[AI] 사진 #'+(idx+1)+' 응답:',txt);
     try{
       var clean=txt.split('\x60\x60\x60').join('').trim();
       var jsonMatch=clean.match(/\{[\s\S]*\}/);
       if(!jsonMatch) throw new Error('no json');
       var obj=JSON.parse(jsonMatch[0]);
-      /* ★ 사진별 GPS 저장 (currentLat 체크 제거) */
-      if(obj.lat&&obj.lon){
-        photoObj.gps={lat:obj.lat,lon:obj.lon,source:'AI',address:obj.addr||null};
+
+      /* ★ 좌표 우선 적용 (워터마크 좌표가 진실) — null과 0 구분 */
+      var hasCoord = (obj.lat!==null&&obj.lat!==undefined&&obj.lon!==null&&obj.lon!==undefined);
+      if(hasCoord){
+        photoObj.gps={lat:obj.lat,lon:obj.lon,source:'AI워터마크',address:obj.addr||null};
         photoObj.gpsScanned=true;
-        if(idx===aIdx) applyGPS(obj.lat,obj.lon,'사진 텍스트',obj.addr);
-        toast('📍 사진 #'+(idx+1)+' AI 인식: '+(obj.addr||obj.lat.toFixed(3)+','+obj.lon.toFixed(3)));
+        if(idx===aIdx) applyGPS(obj.lat,obj.lon,'사진 워터마크',obj.addr);
+        toast('📍 사진 #'+(idx+1)+' 워터마크 좌표: '+obj.lat.toFixed(4)+', '+obj.lon.toFixed(4));
       } else if(obj.addr){
         /* 주소만 있는 경우 Nominatim으로 좌표 확보 */
         photoObj.pendingAddress=obj.addr;
@@ -1968,12 +1985,20 @@ function scanWithClaudeVision(photoObj,idx){
               photoObj.gpsScanned=true;
               if(idx===aIdx) applyGPS(la,lo,'AI 주소',obj.addr);
               toast('📍 사진 #'+(idx+1)+' 주소 인식: '+obj.addr);
-            } else if(idx===aIdx){
-              document.getElementById('addrInput').value=obj.addr;
-              document.getElementById('addrInputWrap').className='addr-input-wrap show';
+            } else {
+              /* 주소 매칭 실패 → EXIF 폴백 */
+              fallbackToEXIF('주소 매칭 실패');
+              if(idx===aIdx){
+                document.getElementById('addrInput').value=obj.addr;
+                document.getElementById('addrInputWrap').className='addr-input-wrap show';
+              }
             }
-          }).catch(function(){});
+          }).catch(function(){fallbackToEXIF('Nominatim 호출 실패');});
+      } else {
+        /* AI가 좌표/주소 둘 다 못 찾음 → EXIF 폴백 */
+        fallbackToEXIF('AI 좌표/주소 미인식');
       }
+      /* 꼭지 자동 감지 (좌표 처리와 무관하게 실행) */
       if(obj.stems&&obj.stems.length>0&&idx===aIdx){
         var W=cvs.width,H=cvs.height;
         for(var si=0;si<obj.stems.length;si++){
@@ -1988,11 +2013,13 @@ function scanWithClaudeVision(photoObj,idx){
         if(photoObj.apples.length>0){renderApples();checkRun();redraw();toast('🍎 꼭지 '+photoObj.apples.length+'개 자동 감지!');}
       }
     }catch(e){
-      if(badge&&idx===aIdx) badge.textContent='위치 미설정';
+      console.error('[AI] 사진 #'+(idx+1)+' JSON 파싱 실패:',e.message);
+      fallbackToEXIF('JSON 파싱 실패');
     }
   })
-  .catch(function(){
-    if(badge) badge.textContent='위치 미설정';
+  .catch(function(e){
+    console.error('[AI] 사진 #'+(idx+1)+' API 호출 실패:',e&&e.message);
+    fallbackToEXIF('API 호출 실패');
   });
 }
 

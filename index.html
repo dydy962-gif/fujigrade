@@ -734,6 +734,7 @@ nav{
         <div class="footnote">기준: 농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=−5.7→0%, a*=+38.8→100%). 꼭지 부위 기준.</div>
 
         <div class="share-bar">
+          <button class="s-btn save" id="saveResultBtn" onclick="onSaveResultClick()" style="background:var(--accent);color:var(--bg);font-weight:600">💾 결과 저장</button>
           <button class="s-btn save" onclick="saveImg()">📥 이미지 저장</button>
           <button class="s-btn share" onclick="shareRes()">📤 공유</button>
           <button class="s-btn copy" onclick="copyTxt()">📋 복사</button>
@@ -952,6 +953,11 @@ function selPhoto(i){
   if(p.gps && p.gps.lat && p.gps.lon){
     applyGPS(p.gps.lat,p.gps.lon,p.gps.source,p.gps.address);
   }
+  /* 결과 + 저장 버튼 상태도 사진별로 갱신 */
+  if(p.res){
+    showResult(p.res,null);
+  }
+  updateSaveButton();
 }
 
 function delPhoto(e,i){
@@ -1200,7 +1206,8 @@ function runAnalysis(){
   var scoreResult=calcScore(avg,avgCard,cnt,cal,avgL);
   p.res={avg:avg,avgCard:avgCard,cnt:cnt,conf:conf,sc:scoreResult.total,items:scoreResult.items,avgL:avgL,cal:cal,mode:photoMode};
   showResult(p.res,null);renderPhotoGrid();renderApples();redraw();updSummary();
-  if(currentRegion) setTimeout(function(){askSaveData(p.res);},1000);
+  /* [정책 2026-05-14] 자동 저장 confirm 제거. 사용자가 "💾 결과 저장" 버튼 직접 클릭 */
+  updateSaveButton();
 }
 
 /* ── 2장 종합 판정 (항목11) ── */
@@ -1233,7 +1240,8 @@ function runDualAnalysis(){
       topPct:topRes.avg,botPct:botRes.avg
     };
     showResult(combinedRes,{top:topRes.avg,bot:botRes.avg});
-    if(currentRegion) setTimeout(function(){askSaveData(combinedRes);},1000);
+    /* [정책 2026-05-14] 자동 저장 confirm 제거 */
+    updateSaveButton();
   } else {
     toast('먼저 각 사진을 선택해 꼭지/하부 마킹 후 판정을 각각 실행하세요.');
   }
@@ -1901,23 +1909,24 @@ function readGPSTags(d,gpsOff,le,base){
   return{lat:lat,lon:lon};
 }
 
-/* ── 업로드 즉시 자동 스캔 ──
-   [정책 변경 2026-05-14] 워터마크 우선 (B-A안)
-   1) AI Vision으로 사진 안의 워터마크 좌표/주소를 먼저 읽음 (가장 신뢰)
-   2) AI 실패 시 EXIF GPS로 폴백
-   3) 둘 다 없으면 사용자 직접 입력 유도 */
+/* ── 업로드 즉시 자동 스캔 ── */
 function autoScanPhoto(photoObj,idx){
-  /* EXIF는 백그라운드로 동시 추출 (폴백용으로만 저장) */
   if(photoObj.file){
     extractEXIF(photoObj.file,function(lat,lon){
       if(lat&&lon){
-        photoObj.exifGps={lat:lat,lon:lon}; /* 폴백용 */
-        console.log('[EXIF] 사진 #'+(idx+1)+' EXIF GPS:',lat,lon,'(폴백용 보관)');
+        /* ★ 사진별 GPS 저장 */
+        photoObj.gps={lat:lat,lon:lon,source:'EXIF',address:null};
+        photoObj.gpsScanned=true;
+        /* 현재 선택된 사진이면 즉시 적용 */
+        if(idx===aIdx) applyGPS(lat,lon,'사진 EXIF');
+        toast('📍 사진 #'+(idx+1)+' EXIF GPS 인식');
+      } else {
+        scanWithClaudeVision(photoObj,idx);
       }
     });
+  } else {
+    scanWithClaudeVision(photoObj,idx);
   }
-  /* AI Vision은 항상 호출 (워터마크 우선) */
-  scanWithClaudeVision(photoObj,idx);
 }
 
 function scanWithClaudeVision(photoObj,idx){
@@ -1925,21 +1934,6 @@ function scanWithClaudeVision(photoObj,idx){
   var mimeType=photoObj.url.split(';')[0].split(':')[1]||'image/jpeg';
   var badge=document.getElementById('envBadge');
   if(badge&&idx===aIdx) badge.textContent='🔍 AI 스캔 중... ('+(idx+1)+')';
-
-  /* ── AI 실패 시 EXIF 폴백 함수 ── */
-  function fallbackToEXIF(reason){
-    console.warn('[AI] 사진 #'+(idx+1)+' 워터마크 인식 실패('+reason+'). EXIF 폴백 시도.');
-    if(photoObj.exifGps){
-      var ex=photoObj.exifGps;
-      photoObj.gps={lat:ex.lat,lon:ex.lon,source:'EXIF',address:null};
-      photoObj.gpsScanned=true;
-      if(idx===aIdx) applyGPS(ex.lat,ex.lon,'사진 EXIF');
-      toast('📍 사진 #'+(idx+1)+' EXIF GPS 사용 (워터마크 못 읽음)');
-    } else {
-      if(badge&&idx===aIdx) badge.textContent='위치 미설정';
-    }
-  }
-
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -1950,7 +1944,7 @@ function scanWithClaudeVision(photoObj,idx){
         role:'user',
         content:[
           {type:'image',source:{type:'base64',media_type:mimeType,data:base64}},
-          {type:'text',text:'이미지에서 다음을 추출해서 JSON으로만 답하세요(다른 텍스트 금지).\n\n[1] 좌표/주소 추출 — 우선순위:\n  (a) 이미지에 명시적으로 적힌 GPS 좌표(예: "35.675841°N, 127.560937°E" 같은 워터마크 텍스트)가 있으면 그 좌표를 정확히 그대로 lat/lon에 넣으세요. 한 자리도 틀리면 안 됨.\n  (b) 좌표가 없고 한국 주소 텍스트(예: "전북특별자치도 음신길 55625")가 보이면 addr에 그대로 넣으세요.\n  (c) 좌표/주소가 전혀 안 보이면 모두 null.\n  ※ 사진 속 워터마크/오버레이/도장 텍스트를 글자 단위로 읽으세요. 추측 금지.\n\n[2] 사과 꼭지 위치(이미지 상대 좌표 0~1) — 최대 5개.\n\n형식: {"lat":숫자|null,"lon":숫자|null,"addr":"원문 그대로"|null,"stems":[{"x":0~1,"y":0~1}]}'}
+          {type:'text',text:'이 이미지를 분석해서 JSON으로만 답하세요. 분석: 1) GPS 좌표 또는 한국 주소(읍/면/동 단위까지 최대한 상세히), 2) 사과 꼭지 위치(이미지 상대 0~1). 형식: {"lat":숫자|null,"lon":숫자|null,"addr":"시도 시군구 읍면동"|null,"stems":[{"x":0~1,"y":0~1}]}'}
         ]
       }]
     })
@@ -1958,20 +1952,17 @@ function scanWithClaudeVision(photoObj,idx){
   .then(function(r){return r.json();})
   .then(function(d){
     var txt=(d.content&&d.content[0]&&d.content[0].text)?d.content[0].text:'';
-    console.log('[AI] 사진 #'+(idx+1)+' 응답:',txt);
     try{
       var clean=txt.split('\x60\x60\x60').join('').trim();
       var jsonMatch=clean.match(/\{[\s\S]*\}/);
       if(!jsonMatch) throw new Error('no json');
       var obj=JSON.parse(jsonMatch[0]);
-
-      /* ★ 좌표 우선 적용 (워터마크 좌표가 진실) — null과 0 구분 */
-      var hasCoord = (obj.lat!==null&&obj.lat!==undefined&&obj.lon!==null&&obj.lon!==undefined);
-      if(hasCoord){
-        photoObj.gps={lat:obj.lat,lon:obj.lon,source:'AI워터마크',address:obj.addr||null};
+      /* ★ 사진별 GPS 저장 (currentLat 체크 제거) */
+      if(obj.lat&&obj.lon){
+        photoObj.gps={lat:obj.lat,lon:obj.lon,source:'AI',address:obj.addr||null};
         photoObj.gpsScanned=true;
-        if(idx===aIdx) applyGPS(obj.lat,obj.lon,'사진 워터마크',obj.addr);
-        toast('📍 사진 #'+(idx+1)+' 워터마크 좌표: '+obj.lat.toFixed(4)+', '+obj.lon.toFixed(4));
+        if(idx===aIdx) applyGPS(obj.lat,obj.lon,'사진 텍스트',obj.addr);
+        toast('📍 사진 #'+(idx+1)+' AI 인식: '+(obj.addr||obj.lat.toFixed(3)+','+obj.lon.toFixed(3)));
       } else if(obj.addr){
         /* 주소만 있는 경우 Nominatim으로 좌표 확보 */
         photoObj.pendingAddress=obj.addr;
@@ -1985,20 +1976,12 @@ function scanWithClaudeVision(photoObj,idx){
               photoObj.gpsScanned=true;
               if(idx===aIdx) applyGPS(la,lo,'AI 주소',obj.addr);
               toast('📍 사진 #'+(idx+1)+' 주소 인식: '+obj.addr);
-            } else {
-              /* 주소 매칭 실패 → EXIF 폴백 */
-              fallbackToEXIF('주소 매칭 실패');
-              if(idx===aIdx){
-                document.getElementById('addrInput').value=obj.addr;
-                document.getElementById('addrInputWrap').className='addr-input-wrap show';
-              }
+            } else if(idx===aIdx){
+              document.getElementById('addrInput').value=obj.addr;
+              document.getElementById('addrInputWrap').className='addr-input-wrap show';
             }
-          }).catch(function(){fallbackToEXIF('Nominatim 호출 실패');});
-      } else {
-        /* AI가 좌표/주소 둘 다 못 찾음 → EXIF 폴백 */
-        fallbackToEXIF('AI 좌표/주소 미인식');
+          }).catch(function(){});
       }
-      /* 꼭지 자동 감지 (좌표 처리와 무관하게 실행) */
       if(obj.stems&&obj.stems.length>0&&idx===aIdx){
         var W=cvs.width,H=cvs.height;
         for(var si=0;si<obj.stems.length;si++){
@@ -2013,13 +1996,11 @@ function scanWithClaudeVision(photoObj,idx){
         if(photoObj.apples.length>0){renderApples();checkRun();redraw();toast('🍎 꼭지 '+photoObj.apples.length+'개 자동 감지!');}
       }
     }catch(e){
-      console.error('[AI] 사진 #'+(idx+1)+' JSON 파싱 실패:',e.message);
-      fallbackToEXIF('JSON 파싱 실패');
+      if(badge&&idx===aIdx) badge.textContent='위치 미설정';
     }
   })
-  .catch(function(e){
-    console.error('[AI] 사진 #'+(idx+1)+' API 호출 실패:',e&&e.message);
-    fallbackToEXIF('API 호출 실패');
+  .catch(function(){
+    if(badge) badge.textContent='위치 미설정';
   });
 }
 
@@ -2254,13 +2235,24 @@ function renderRegionList(data){
   el.innerHTML=h;
 }
 
-/* ── 저장 (항목9: 날씨 포함 저장) ── */
-function askSaveData(res){
-  if(!currentRegion) return;
+/* ── 저장 (항목9: 날씨 포함 저장) ──
+   [정책 변경 2026-05-14] confirm 팝업 제거.
+   판정 후 자동 저장 안 함. 사용자가 결과 패널의 "💾 결과 저장" 버튼을 직접 눌러야 저장됨.
+   같은 결과를 두 번 저장하지 않도록 photoObj.saved 플래그로 중복 방지. */
+function saveResultData(res){
+  if(!currentRegion){
+    toast('⚠️ 위치를 먼저 설정해주세요 (사진 GPS 또는 주소 입력)');
+    return false;
+  }
+  /* 중복 저장 방지: 현재 사진이 이미 저장됐는지 확인 */
+  var curPhoto=(aIdx>=0&&photos[aIdx])?photos[aIdx]:null;
+  if(curPhoto&&curPhoto.saved){
+    toast('이미 저장된 결과입니다');
+    return false;
+  }
+
   var rname='';
   for(var ri=0;ri<REGIONS.length;ri++){if(REGIONS[ri].id===currentRegion){rname=REGIONS[ri].name;break;}}
-  var ans=confirm('이번 판정 결과('+res.avg+'%)를 '+rname+' 데이터에 저장하겠습니까?');
-  if(!ans) return;
 
   /* 도별 집계 저장 */
   var data=loadRegionData();
@@ -2341,9 +2333,42 @@ function askSaveData(res){
   records.push(record);
   saveAllRecords(records);
 
-  toast('저장 완료! '+rname+' 평균 '+data[currentRegion].avg+'%');
+  /* 중복 저장 방지: 이 사진을 저장됨으로 표시 */
+  if(curPhoto) curPhoto.saved=true;
+
+  toast('💾 저장 완료! '+rname+' 평균 '+data[currentRegion].avg+'%');
   initKoreaMap();
   renderRecordsPage();
+  updateSaveButton(); /* 버튼 상태 갱신 (저장됨 → 비활성) */
+  return true;
+}
+
+/* ── 저장 버튼 상태 갱신 ── */
+function updateSaveButton(){
+  var btn=document.getElementById('saveResultBtn');
+  if(!btn) return;
+  var curPhoto=(aIdx>=0&&photos[aIdx])?photos[aIdx]:null;
+  if(curPhoto&&curPhoto.saved){
+    btn.innerHTML='✅ 저장됨';
+    btn.style.background='var(--muted)';
+    btn.style.color='var(--bg)';
+    btn.disabled=true;
+  } else {
+    btn.innerHTML='💾 결과 저장';
+    btn.style.background='var(--accent)';
+    btn.style.color='var(--bg)';
+    btn.disabled=false;
+  }
+}
+
+/* ── 결과 저장 버튼 클릭 핸들러 ── */
+function onSaveResultClick(){
+  var curPhoto=(aIdx>=0&&photos[aIdx])?photos[aIdx]:null;
+  if(!curPhoto||!curPhoto.res){
+    toast('먼저 판정을 실행하세요');
+    return;
+  }
+  saveResultData(curPhoto.res);
 }
 
 /* ════ 기록 탭 렌더링 (항목9) ════ */
@@ -2398,20 +2423,35 @@ function renderRecordsPage(){
   if(avgRain!==null) html+='<div class="rec-stat"><span class="sv">'+avgRain+'mm</span><span class="sl">평균강수량</span></div>';
   html+='</div>';
 
-  /* 개별 기록 카드 */
+  /* ── 일괄 삭제 도구모음 ── */
+  html+='<div class="rec-toolbar" style="display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:10px;flex-wrap:wrap">';
+  html+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--cream)">';
+  html+='<input type="checkbox" id="recSelectAll" onchange="toggleSelectAllRecords(this.checked)" style="width:16px;height:16px;cursor:pointer"> 전체 선택';
+  html+='</label>';
+  html+='<span style="font-size:11px;color:var(--muted)" id="recSelectedCount">선택: 0건</span>';
+  html+='<div style="flex:1"></div>';
+  html+='<button onclick="deleteSelectedRecords()" id="recDelSelBtn" disabled style="background:rgba(255,100,100,.15);border:1px solid rgba(255,100,100,.4);color:#ff8080;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;opacity:.5">🗑 선택 삭제</button>';
+  html+='<button onclick="deleteAllRecords()" style="background:rgba(255,100,100,.08);border:1px solid rgba(255,100,100,.3);color:#ff8080;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer">🗑 전체 삭제</button>';
+  html+='</div>';
+
+  /* 개별 기록 카드 (체크박스 추가) */
   for(var i=filtered.length-1;i>=0;i--){
     var rec=filtered[i];
-    html+='<div class="rec-entry">';
-    html+='<div class="rec-entry-head">';
+    html+='<div class="rec-entry" data-rec-id="'+rec.id+'" style="position:relative">';
+    /* 체크박스 */
+    html+='<input type="checkbox" class="rec-check" data-rec-id="'+rec.id+'" onchange="onRecCheckChange()" style="position:absolute;top:14px;left:14px;width:18px;height:18px;cursor:pointer;z-index:2">';
+    /* 개별 삭제 버튼 */
+    html+='<button onclick="deleteOneRecord('+rec.id+')" title="이 기록만 삭제" style="position:absolute;top:10px;right:10px;background:rgba(255,100,100,.1);border:1px solid rgba(255,100,100,.3);color:#ff8080;width:26px;height:26px;border-radius:6px;font-size:12px;cursor:pointer;z-index:2">✕</button>';
+
+    html+='<div class="rec-entry-head" style="padding-left:32px">';
     html+='<div class="rec-entry-grade" style="background:'+rec.gradeColor+'">'+rec.grade+'</div>';
     html+='<div class="rec-entry-info">';
     html+='<div class="rec-entry-pct" style="color:'+rec.gradeColor+'">'+rec.pct+'%</div>';
     html+='<div class="rec-entry-meta">'+rec.regionName+(rec.address?' · '+rec.address.slice(0,20):'')+(rec.mode==='both'?' · 상+하부':rec.mode==='bottom'?' · 하부':'')+'</div>';
     html+='</div>';
-    html+='<div class="rec-entry-date">'+rec.date+(rec.harvestDate?'<br>수확:'+rec.harvestDate.slice(5):'')+'</div>';
+    html+='<div class="rec-entry-date" style="margin-right:36px">'+rec.date+(rec.harvestDate?'<br>수확:'+rec.harvestDate.slice(5):'')+'</div>';
     html+='</div>';
     if(rec.weather){
-      /* 구버전(sunDays) / 신버전(sunHours) 호환 */
       var sunDisplay='—';
       if(typeof rec.weather.sunHours!=='undefined') sunDisplay=rec.weather.sunHours+'h';
       else if(typeof rec.weather.sunDays!=='undefined') sunDisplay=rec.weather.sunDays+'일';
@@ -2428,6 +2468,81 @@ function renderRecordsPage(){
   }
 
   contentEl.innerHTML=html;
+}
+
+/* ── 기록 삭제 함수들 (항목6) ── */
+function onRecCheckChange(){
+  var checks=document.querySelectorAll('.rec-check:checked');
+  var countEl=document.getElementById('recSelectedCount');
+  var btnEl=document.getElementById('recDelSelBtn');
+  if(countEl) countEl.textContent='선택: '+checks.length+'건';
+  if(btnEl){
+    btnEl.disabled=(checks.length===0);
+    btnEl.style.opacity=checks.length===0?'.5':'1';
+  }
+}
+
+function toggleSelectAllRecords(checked){
+  var checks=document.querySelectorAll('.rec-check');
+  for(var i=0;i<checks.length;i++) checks[i].checked=checked;
+  onRecCheckChange();
+}
+
+function deleteOneRecord(id){
+  if(!confirm('이 기록 1건을 삭제하시겠습니까?')) return;
+  var records=loadAllRecords();
+  /* 도별 집계에서도 차감 */
+  var target=null;
+  for(var i=0;i<records.length;i++){if(records[i].id===id){target=records[i];break;}}
+  if(!target){toast('기록을 찾지 못했습니다');return;}
+  removeFromRegionAgg(target);
+  records=records.filter(function(r){return r.id!==id;});
+  saveAllRecords(records);
+  toast('1건 삭제됨');
+  renderRecordsPage();
+  initKoreaMap();
+}
+
+function deleteSelectedRecords(){
+  var checks=document.querySelectorAll('.rec-check:checked');
+  if(!checks.length){toast('선택된 기록이 없습니다');return;}
+  if(!confirm(checks.length+'건을 삭제하시겠습니까?')) return;
+  var ids={};
+  for(var i=0;i<checks.length;i++) ids[checks[i].dataset.recId]=true;
+  var records=loadAllRecords();
+  /* 도별 집계 차감 */
+  for(var i=0;i<records.length;i++){if(ids[String(records[i].id)]) removeFromRegionAgg(records[i]);}
+  records=records.filter(function(r){return !ids[String(r.id)];});
+  saveAllRecords(records);
+  toast(Object.keys(ids).length+'건 삭제됨');
+  renderRecordsPage();
+  initKoreaMap();
+}
+
+function deleteAllRecords(){
+  var records=loadAllRecords();
+  if(!records.length){toast('삭제할 기록이 없습니다');return;}
+  if(!confirm('정말 전체 '+records.length+'건의 기록을 모두 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
+  if(!confirm('한 번 더 확인합니다. 모든 기록을 삭제하시겠습니까?')) return;
+  saveAllRecords([]);
+  /* 도별 집계도 초기화 */
+  saveRegionData({});
+  toast('전체 '+records.length+'건 삭제 완료');
+  renderRecordsPage();
+  initKoreaMap();
+}
+
+/* 기록 삭제 시 도별 집계에서 해당 항목 차감 */
+function removeFromRegionAgg(rec){
+  if(!rec||!rec.region) return;
+  var data=loadRegionData();
+  if(!data[rec.region]) return;
+  var d=data[rec.region];
+  d.sum=Math.max(0,(d.sum||0)-rec.pct);
+  d.count=Math.max(0,(d.count||0)-1);
+  if(d.count===0){delete data[rec.region];}
+  else {d.avg=Math.round(d.sum/d.count*10)/10;}
+  saveRegionData(data);
 }
 
 function setRecTab(tab){

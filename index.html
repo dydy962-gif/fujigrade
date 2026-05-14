@@ -513,14 +513,6 @@ nav{
 }
 .krei-dot:nth-child(2){animation-delay:.2s}
 .krei-dot:nth-child(3){animation-delay:.4s}
-.krei-skip{
-  position:absolute;bottom:90px;background:rgba(255,255,255,.1);
-  border:1px solid rgba(255,255,255,.25);color:#fff;
-  padding:8px 20px;border-radius:20px;font-size:11px;cursor:pointer;
-  font-family:inherit;letter-spacing:.05em;transition:all .2s;
-  animation:kreiFadeIn .8s ease-out 1.3s both;
-}
-.krei-skip:hover{background:rgba(255,255,255,.2)}
 @media(max-width:480px){
   .krei-symbol{width:70px;height:70px}
   .krei-symbol::before{width:26px;height:26px;top:14px;left:22px}
@@ -541,7 +533,6 @@ nav{
   <div class="krei-subtitle">Korea Rural Economic Institute</div>
   <div class="krei-product">🍎 FujiGrade</div>
   <div class="krei-product-sub">후지사과 착색 판정 시스템</div>
-  <button class="krei-skip" onclick="hideKreiSplash()">건너뛰기 →</button>
   <div class="krei-loading">
     <div class="krei-dot"></div>
     <div class="krei-dot"></div>
@@ -552,9 +543,14 @@ nav{
 function hideKreiSplash(){
   var s=document.getElementById('kreiSplash');
   if(s){s.classList.add('fade-out');setTimeout(function(){s.style.display='none';},600);}
+  try{localStorage.setItem('kreiSplashSeen',Date.now());}catch(e){}
 }
-/* 항상 2.5초 — 자연스러운 시간감. 사용자가 빠르게 넘어가고 싶으면 '건너뛰기' 버튼 */
-setTimeout(hideKreiSplash, 2500);
+/* 첫 방문 2.5초, 재방문(이전에 본 적 있음) 1.8초 — 자연스러운 차이 */
+(function(){
+  var seen=false;
+  try{seen=!!localStorage.getItem('kreiSplashSeen');}catch(e){}
+  setTimeout(hideKreiSplash, seen?1800:2500);
+})();
 </script>
 
 <!-- 프로토콜 진단 배너 - file:// 환경 자동 경고 -->

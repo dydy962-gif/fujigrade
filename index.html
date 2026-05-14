@@ -1450,84 +1450,78 @@ function getElev(m){
 /* ── 날씨 그리드 + 2주 요약 (항목6) ── */
 function loadWeatherGrid(lat,lon){
   var emptyEl=document.getElementById('weatherEmpty');
-  if(emptyEl){emptyEl.style.display='block';emptyEl.textContent='🌦️ 날씨 데이터 가져오는 중...';emptyEl.style.color='var(--accent)';}
+  if(emptyEl){emptyEl.style.display='block';emptyEl.textContent='🌦️ 기상청 데이터 가져오는 중...';emptyEl.style.color='var(--accent)';}
 
-  /* 프로토콜 진단 */
   var protocol=window.location.protocol;
-  console.log('[Weather] Protocol:', protocol, '| URL:', window.location.href);
+  console.log('[Weather] Protocol:', protocol);
 
-  var url='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code,sunshine_duration&past_days=14&forecast_days=1&timezone=Asia%2FSeoul';
-  console.log('[Weather] Fetching:', url);
+  /* 기상청(KMA) — Netlify Function 경유 */
+  var kmaUrl='/.netlify/functions/weather?lat='+lat+'&lon='+lon+'&days=14';
+  /* Open-Meteo 폴백 */
+  var omUrl='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code,sunshine_duration&past_days=14&forecast_days=1&timezone=Asia%2FSeoul';
 
-  function onSuccess(d){
-    console.log('[Weather] Response:', d);
-    if(!d || !d.daily){
-      if(emptyEl){emptyEl.textContent='⚠️ 응답에 daily 데이터 없음';emptyEl.style.color='var(--warn)';}
+  function onSuccess(d, source, stationInfo){
+    console.log('[Weather] Source:', source, 'Data:', d);
+    if(!d || !d.daily || !d.daily.time || d.daily.time.length===0){
+      if(emptyEl){emptyEl.textContent='⚠️ '+source+' 응답에 데이터 없음';emptyEl.style.color='var(--warn)';}
       return;
     }
     weatherCache=d.daily;
+    weatherCache._source=source;
+    weatherCache._station=stationInfo;
     var harvestVal=document.getElementById('harvestDate').value;
     renderWeatherGrid(d.daily,harvestVal||new Date().toISOString().slice(0,10));
     renderWeatherSummary(d.daily);
     setBadge(currentAddress?currentAddress.slice(0,14):'실시간','var(--accent)');
     if(emptyEl) emptyEl.style.display='none';
+    /* 데이터 출처 표시 */
+    var titleEl=document.getElementById('wsSummaryTitle');
+    if(titleEl){
+      var srcInfo='';
+      if(source==='KMA AWS' && stationInfo){
+        srcInfo=' · 🇰🇷 기상청 '+stationInfo.name+'('+stationInfo.distance_km+'km)';
+      } else {
+        srcInfo=' · 🌍 Open-Meteo';
+      }
+      var existingTitle=titleEl.textContent.replace(/ · 🇰🇷.*$| · 🌍.*$/,'');
+      titleEl.innerHTML=existingTitle+'<span style="font-size:9px;opacity:.7;font-weight:normal">'+srcInfo+'</span>';
+    }
   }
 
   function onFailAll(reason){
-    console.error('[Weather] All methods failed:', reason);
+    console.error('[Weather] All failed:', reason);
     if(emptyEl){
       emptyEl.style.display='block';
-      var diag='';
-      if(protocol==='file:') diag='\n💡 파일을 직접 열면(file://) 네트워크 차단됩니다. 다음 중 하나 시도하세요:\n1) 카카오톡/인스타 등 인앱브라우저 → 외부 브라우저(Chrome/Safari)로 열기\n2) GitHub Pages·Netlify·Vercel 등에 업로드해서 https://로 접속';
-      else if(reason.indexOf('Failed to fetch')>=0) diag='\n💡 네트워크 차단됨. WiFi 또는 방화벽 확인하세요.';
-      emptyEl.textContent='⚠️ 날씨 조회 실패: '+reason+' [프로토콜: '+protocol+']'+diag;
+      emptyEl.textContent='⚠️ 날씨 조회 실패: '+reason;
       emptyEl.style.color='var(--warn)';
-      emptyEl.style.whiteSpace='pre-line';
     }
     setBadge('날씨 실패','var(--warn)');
   }
 
-  /* 방법 1: fetch (모던 브라우저) */
-  function tryFetch(){
-    return fetch(url)
-      .then(function(r){
-        console.log('[Weather] fetch HTTP status:', r.status);
-        if(!r.ok) throw new Error('HTTP '+r.status);
-        return r.json();
-      });
-  }
-
-  /* 방법 2: XMLHttpRequest (구형 브라우저 호환) */
-  function tryXHR(){
-    return new Promise(function(resolve,reject){
-      var xhr=new XMLHttpRequest();
-      xhr.open('GET',url,true);
-      xhr.timeout=15000;
-      xhr.onload=function(){
-        console.log('[Weather] XHR status:', xhr.status);
-        if(xhr.status>=200&&xhr.status<300){
-          try{resolve(JSON.parse(xhr.responseText));}
-          catch(e){reject(new Error('JSON parse fail'));}
-        } else reject(new Error('XHR HTTP '+xhr.status));
-      };
-      xhr.onerror=function(){reject(new Error('XHR network error'));};
-      xhr.ontimeout=function(){reject(new Error('XHR timeout'));};
-      try{xhr.send();}catch(e){reject(e);}
-    });
-  }
-
-  /* 방법 3: <script> 태그 임베드 (file:// 환경 우회용) — JSONP 미지원이라 실패하지만 진단용 */
-  /* Open-Meteo는 JSONP 미지원, 따라서 file:// 환경에서는 근본 해결 불가 */
-
-  tryFetch()
-    .then(onSuccess)
+  /* 1차: 기상청 (Netlify Function 경유) */
+  console.log('[Weather] 기상청 시도:', kmaUrl);
+  fetch(kmaUrl)
+    .then(function(r){
+      console.log('[Weather] KMA HTTP:', r.status);
+      if(!r.ok) throw new Error('KMA HTTP '+r.status);
+      return r.json();
+    })
+    .then(function(d){
+      if(d.error) throw new Error('KMA: '+d.error);
+      if(!d.daily || !d.daily.time || d.daily.time.length===0) throw new Error('KMA 데이터 없음');
+      onSuccess(d, 'KMA AWS', d.meta&&d.meta.station);
+    })
     .catch(function(e1){
-      console.warn('[Weather] fetch failed, trying XHR:', e1.message);
-      tryXHR()
-        .then(onSuccess)
+      console.warn('[Weather] 기상청 실패, Open-Meteo 폴백:', e1.message);
+      if(emptyEl) emptyEl.textContent='🌍 Open-Meteo로 폴백 중...';
+      fetch(omUrl)
+        .then(function(r){
+          if(!r.ok) throw new Error('Open-Meteo HTTP '+r.status);
+          return r.json();
+        })
+        .then(function(d){onSuccess(d, 'Open-Meteo', null);})
         .catch(function(e2){
-          console.warn('[Weather] XHR also failed:', e2.message);
-          onFailAll(e1.message+' / '+e2.message);
+          onFailAll('기상청('+e1.message+') + Open-Meteo('+e2.message+')');
         });
     });
 }

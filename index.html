@@ -1397,36 +1397,64 @@ function applyGPS(lat,lon,src,knownAddress){
     currentAddress=knownAddress;
     currentRegion=detectRegion(lat,lon,knownAddress);
     setEV('envLoc',knownAddress);
+    setBadge(knownAddress.length>14?knownAddress.slice(0,14)+'..':knownAddress,'var(--accent)');
   } else {
-    /* 주소 없으면 일단 위경도로 임시 판별 */
+    /* 주소 없으면 일단 위경도로 임시 판별 (좌표는 표시하지 않음) */
     currentRegion=detectRegion(lat,lon,null);
+    setEV('envLoc','📍 주소 확인 중...');
+    setBadge('주소 확인 중','var(--accent)');
   }
-  setBadge(lat.toFixed(3)+','+lon.toFixed(3),'var(--accent)');
 
-  /* 역지오코딩 — 읍면동까지 (항목3) */
-  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=ko&addressdetails=1',{mode:'cors',headers:{'Accept':'application/json'}})
+  /* 역지오코딩 — 리/읍/면 우선 표시 */
+  fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&accept-language=ko&addressdetails=1&zoom=14',{mode:'cors',headers:{'Accept':'application/json'}})
     .then(function(r){return r.json();})
     .then(function(d){
       var a=d.address||{};
-      /* 시/도 — 시/군/구 — 읍/면/동/리 순으로 조합 */
+      console.log('[Nominatim] 응답:', a);
+      /* 시/도 */
       var sido=a.province||a.state||'';
+      /* 시/군/구 */
       var sigungu=a.city||a.county||a.town||a.city_district||'';
-      var eupmyeondong=a.suburb||a.quarter||a.neighbourhood||a.village||a.hamlet||a.town||'';
-      /* 시/군/구와 읍면동이 같은 경우 제외 */
+      /* 리/읍/면/동 — 리/마을 우선, 그 다음 읍/면, 마지막 동/구 */
+      var eupmyeondong=a.village||a.hamlet||a.neighbourhood||a.suburb||a.quarter||'';
+      /* town이 sigungu에 안 쓰였으면 town도 후보 */
+      if(!eupmyeondong && a.town && a.town!==sigungu) eupmyeondong=a.town;
+      /* 중복 제거 */
       if(eupmyeondong===sigungu) eupmyeondong='';
-      var loc=(sido+' '+sigungu+' '+eupmyeondong).replace(/  /g,' ').trim();
-      if(!loc) loc=lat.toFixed(4)+', '+lon.toFixed(4);
+      var loc=(sido+' '+sigungu+' '+eupmyeondong).replace(/\s+/g,' ').trim();
+
+      /* display_name에서 추출 시도 (fallback) */
+      if(!loc && d.display_name){
+        /* "강원특별자치도 영월군 신일리, 12345" 형식 → 앞쪽 행정구역만 */
+        var parts=d.display_name.split(',').map(function(s){return s.trim();});
+        /* 우편번호/숫자만 있는 부분 제외 */
+        var addrParts=[];
+        for(var i=0;i<parts.length;i++){
+          if(/^\d/.test(parts[i])) continue; /* 숫자로 시작하면 스킵 */
+          if(parts[i]==='대한민국'||parts[i]==='South Korea') continue;
+          addrParts.push(parts[i]);
+        }
+        loc=addrParts.slice(0,3).reverse().join(' '); /* 한국 주소는 큰 단위→작은 단위 */
+      }
+
+      /* 그래도 비어있으면 좌표 (최후 수단) */
+      if(!loc) loc='위치 확인 불가';
+
       currentAddress=loc;
-      /* ★ 도 판별 재실행: 주소 기반으로 정확하게 */
+      /* 도 판별 재실행 */
       var newRegion=detectRegion(lat,lon,loc);
       if(newRegion!==currentRegion){
         console.log('[Region] 위경도판별('+currentRegion+') → 주소판별('+newRegion+')로 변경');
         currentRegion=newRegion;
       }
       setEV('envLoc',loc);
-      setBadge(loc.length>12?loc.slice(0,12)+'..':loc,'var(--accent)');
-      initKoreaMap(); /* 도 변경 반영 */
-    }).catch(function(){setEV('envLoc',lat.toFixed(4)+', '+lon.toFixed(4));});
+      setBadge(loc.length>14?loc.slice(0,14)+'..':loc,'var(--accent)');
+      initKoreaMap();
+    }).catch(function(e){
+      console.error('[Nominatim] 실패:', e);
+      setEV('envLoc','주소 조회 실패');
+      setBadge('주소 조회 실패','var(--warn)');
+    });
   /* 고도 */
   fetch('https://api.open-elevation.com/api/v1/lookup?locations='+lat+','+lon,{mode:'cors'})
     .then(function(r){return r.json();})
@@ -1447,82 +1475,49 @@ function getElev(m){
   return{t:'고산',w:'매우강함',s:'많음'};
 }
 
-/* ── 날씨 그리드 + 2주 요약 (항목6) ── */
+/* ── 날씨 그리드 + 2주 요약 (Open-Meteo) ── */
 function loadWeatherGrid(lat,lon){
   var emptyEl=document.getElementById('weatherEmpty');
-  if(emptyEl){emptyEl.style.display='block';emptyEl.textContent='🌦️ 기상청 데이터 가져오는 중...';emptyEl.style.color='var(--accent)';}
+  if(emptyEl){emptyEl.style.display='block';emptyEl.textContent='🌦️ 날씨 데이터 가져오는 중...';emptyEl.style.color='var(--accent)';}
 
-  var protocol=window.location.protocol;
-  console.log('[Weather] Protocol:', protocol);
+  console.log('[Weather] Protocol:', window.location.protocol);
 
-  /* 기상청(KMA) — Netlify Function 경유 */
-  var kmaUrl='/.netlify/functions/weather?lat='+lat+'&lon='+lon+'&days=14';
-  /* Open-Meteo 폴백 */
-  var omUrl='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code,sunshine_duration&past_days=14&forecast_days=1&timezone=Asia%2FSeoul';
+  var url='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code,sunshine_duration&past_days=14&forecast_days=1&timezone=Asia%2FSeoul';
+  console.log('[Weather] Open-Meteo 호출:', url);
 
-  function onSuccess(d, source, stationInfo){
-    console.log('[Weather] Source:', source, 'Data:', d);
-    if(!d || !d.daily || !d.daily.time || d.daily.time.length===0){
-      if(emptyEl){emptyEl.textContent='⚠️ '+source+' 응답에 데이터 없음';emptyEl.style.color='var(--warn)';}
-      return;
-    }
-    weatherCache=d.daily;
-    weatherCache._source=source;
-    weatherCache._station=stationInfo;
-    var harvestVal=document.getElementById('harvestDate').value;
-    renderWeatherGrid(d.daily,harvestVal||new Date().toISOString().slice(0,10));
-    renderWeatherSummary(d.daily);
-    setBadge(currentAddress?currentAddress.slice(0,14):'실시간','var(--accent)');
-    if(emptyEl) emptyEl.style.display='none';
-    /* 데이터 출처 표시 */
-    var titleEl=document.getElementById('wsSummaryTitle');
-    if(titleEl){
-      var srcInfo='';
-      if(source==='KMA AWS' && stationInfo){
-        srcInfo=' · 🇰🇷 기상청 '+stationInfo.name+'('+stationInfo.distance_km+'km)';
-      } else {
-        srcInfo=' · 🌍 Open-Meteo';
-      }
-      var existingTitle=titleEl.textContent.replace(/ · 🇰🇷.*$| · 🌍.*$/,'');
-      titleEl.innerHTML=existingTitle+'<span style="font-size:9px;opacity:.7;font-weight:normal">'+srcInfo+'</span>';
-    }
-  }
-
-  function onFailAll(reason){
-    console.error('[Weather] All failed:', reason);
-    if(emptyEl){
-      emptyEl.style.display='block';
-      emptyEl.textContent='⚠️ 날씨 조회 실패: '+reason;
-      emptyEl.style.color='var(--warn)';
-    }
-    setBadge('날씨 실패','var(--warn)');
-  }
-
-  /* 1차: 기상청 (Netlify Function 경유) */
-  console.log('[Weather] 기상청 시도:', kmaUrl);
-  fetch(kmaUrl)
+  fetch(url)
     .then(function(r){
-      console.log('[Weather] KMA HTTP:', r.status);
-      if(!r.ok) throw new Error('KMA HTTP '+r.status);
+      console.log('[Weather] HTTP:', r.status);
+      if(!r.ok) throw new Error('HTTP '+r.status);
       return r.json();
     })
     .then(function(d){
-      if(d.error) throw new Error('KMA: '+d.error);
-      if(!d.daily || !d.daily.time || d.daily.time.length===0) throw new Error('KMA 데이터 없음');
-      onSuccess(d, 'KMA AWS', d.meta&&d.meta.station);
+      console.log('[Weather] 응답:', d);
+      if(!d || !d.daily || !d.daily.time || d.daily.time.length===0){
+        if(emptyEl){emptyEl.textContent='⚠️ 응답에 데이터 없음';emptyEl.style.color='var(--warn)';}
+        return;
+      }
+      weatherCache=d.daily;
+      weatherCache._source='Open-Meteo';
+      var harvestVal=document.getElementById('harvestDate').value;
+      renderWeatherGrid(d.daily,harvestVal||new Date().toISOString().slice(0,10));
+      renderWeatherSummary(d.daily);
+      if(emptyEl) emptyEl.style.display='none';
+      /* 데이터 출처 표시 — Open-Meteo */
+      var titleEl=document.getElementById('wsSummaryTitle');
+      if(titleEl){
+        var existingTitle=titleEl.textContent.replace(/ · 🌍.*$| · 🇰🇷.*$/,'');
+        titleEl.innerHTML=existingTitle+'<span style="font-size:9px;opacity:.7;font-weight:normal"> · 🌍 Open-Meteo</span>';
+      }
     })
-    .catch(function(e1){
-      console.warn('[Weather] 기상청 실패, Open-Meteo 폴백:', e1.message);
-      if(emptyEl) emptyEl.textContent='🌍 Open-Meteo로 폴백 중...';
-      fetch(omUrl)
-        .then(function(r){
-          if(!r.ok) throw new Error('Open-Meteo HTTP '+r.status);
-          return r.json();
-        })
-        .then(function(d){onSuccess(d, 'Open-Meteo', null);})
-        .catch(function(e2){
-          onFailAll('기상청('+e1.message+') + Open-Meteo('+e2.message+')');
-        });
+    .catch(function(e){
+      console.error('[Weather] 실패:', e);
+      if(emptyEl){
+        emptyEl.style.display='block';
+        emptyEl.textContent='⚠️ 날씨 조회 실패: '+e.message;
+        emptyEl.style.color='var(--warn)';
+      }
+      setBadge('날씨 실패','var(--warn)');
     });
 }
 

@@ -86,6 +86,7 @@ exports.handler = async function(event, context) {
           status: result.status,
           output: result.output,
           error: result.error,
+          logs: result.logs,  // 디버깅용 — Replicate 로그 그대로 전달
           predict_time: result.metrics?.predict_time
         })
       };
@@ -100,19 +101,16 @@ exports.handler = async function(event, context) {
 
     if (mode === 'sam3' || !mode) {
       modelInfo = REPLICATE_MODELS.sam3;
+      // SAM3 입력 — visualize_output은 true 필수 (모델이 출력에 강제)
       input = {
         image: image,
         prompt: prompt || 'apple',
         max_masks: 50,
         return_polygons: true,
-        multimask_output: true,
-        confidence_threshold: 0.3,
-        visualize_output: false
+        multimask_output: false,
+        visualize_output: true  // ⚠️ false면 "validation error for Output visualization" 에러 발생
       };
-      if (points && points.length > 0) {
-        input.points = JSON.stringify(points);
-        if (point_labels) input.point_labels = JSON.stringify(point_labels);
-      }
+      console.log('[sam-yolo] SAM3 input:', JSON.stringify({...input, image: '...(생략)'}));
     } else if (mode === 'yolo') {
       modelInfo = REPLICATE_MODELS.yolo;
       input = {

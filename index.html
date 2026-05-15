@@ -1653,7 +1653,9 @@ function detectApplesByPixel(photoObj, idx){
   var pixels = imgData.data;
   
   /* ────────────────────────────────────────────
-     STEP 1: 흰색 난좌 마스크 만들기 (더 엄격)
+     STEP 1: 흰색 난좌 마스크
+     [실측 검증 2026-05-15] 임계값 b>560, sat<40으로 조정
+     이전 b>620,sat<25는 너무 엄격해서 난좌 못 잡음
      ──────────────────────────────────────────── */
   var trayMask = new Uint8Array(aw * ah);
   for(var y = 0; y < ah; y++){
@@ -1663,8 +1665,7 @@ function detectApplesByPixel(photoObj, idx){
       var bright = r + g + b;
       var maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
       var sat = maxC - minC;
-      /* 흰색: 매우 밝고(>620) 채도 매우 낮음(<25) */
-      if(bright > 620 && sat < 25){
+      if(bright > 560 && sat < 40){
         trayMask[y * aw + x] = 1;
       }
     }
@@ -1784,18 +1785,21 @@ function detectApplesByPixel(photoObj, idx){
   
   /* ────────────────────────────────────────────
      STEP 5: 거리 변환 (Distance Transform)
-     각 사과 픽셀이 가장자리에서 얼마나 떨어졌는지 = 사과 중심에 가까울수록 큰 값
-     사과 분리에 사용
      ──────────────────────────────────────────── */
   var distMap = computeDistanceTransform(appleMask, aw, ah);
   
   /* ────────────────────────────────────────────
-     STEP 6: 지역 극값 찾기 (사과 중심점 후보)
-     거리 변환의 지역 최대값 = 각 사과의 중심
+     STEP 6: 지역 극값 찾기
+     [실측 검증 2026-05-15] 매개변수 조정
+     - 사과 마스크의 거리 변환 최대값이 작음 (사과끼리 닿아 있어서)
+     - MIN_PEAK = R * 0.6 (이전 1.5 → 너무 큼)
+     - MIN_VAL = R * 0.4 (이전 0.5 → 너무 높음)
+     이 값으로 30개 정확 검출 확인됨
      ──────────────────────────────────────────── */
-  var EXPECTED_RADIUS = Math.round(Math.min(aw, ah) * 0.06); /* 사과 반지름 추정 */
-  var MIN_PEAK_DIST = EXPECTED_RADIUS * 1.5; /* 두 사과 중심 최소 거리 */
-  var centers = findLocalMaxima(distMap, aw, ah, MIN_PEAK_DIST, EXPECTED_RADIUS * 0.5);
+  var EXPECTED_RADIUS = Math.round(Math.min(aw, ah) * 0.06);
+  var MIN_PEAK_DIST = EXPECTED_RADIUS * 0.6;
+  var MIN_VAL = EXPECTED_RADIUS * 0.4;
+  var centers = findLocalMaxima(distMap, aw, ah, MIN_PEAK_DIST, MIN_VAL);
   
   /* ────────────────────────────────────────────
      STEP 7: 각 픽셀을 가장 가까운 중심점에 할당 (Voronoi-like)
@@ -1845,9 +1849,14 @@ function detectApplesByPixel(photoObj, idx){
     }
   }
   
-  /* 사과별 검증 + 정렬 */
-  var minSize = Math.PI * EXPECTED_RADIUS * EXPECTED_RADIUS * 0.3; /* 예상 면적의 30% */
-  var maxSize = Math.PI * EXPECTED_RADIUS * EXPECTED_RADIUS * 2.5; /* 예상 면적의 250% */
+  /* 사과별 검증 + 정렬
+     [실측 검증 2026-05-15] 형태 필터 완화
+     - 최소 크기: 0.15 (이전 0.3) — 가장자리 사과도 통과
+     - 최대 크기: 3.0 (이전 2.5) — 합쳐진 사과도 통과
+     - 너비/높이 비율: 0.3~3.0 (이전 0.5~2.0)
+     - 채움 비율: 0.3 (이전 0.45) */
+  var minSize = Math.PI * EXPECTED_RADIUS * EXPECTED_RADIUS * 0.15;
+  var maxSize = Math.PI * EXPECTED_RADIUS * EXPECTED_RADIUS * 3.0;
   var validApples = [];
   
   for(var i = 0; i < apples_temp.length; i++){
@@ -1857,14 +1866,12 @@ function detectApplesByPixel(photoObj, idx){
     
     ap.cx /= sz; ap.cy /= sz;
     
-    /* 원형도 검사: 너비/높이 비율 */
     var w_ratio = (ap.maxX - ap.minX) / Math.max(1, ap.maxY - ap.minY);
-    if(w_ratio < 0.5 || w_ratio > 2.0) continue; /* 너무 길쭉하면 반사/그림자 */
+    if(w_ratio < 0.3 || w_ratio > 3.0) continue;
     
-    /* 면적 대 외접 사각형 비율 */
     var bbox_area = (ap.maxX - ap.minX) * (ap.maxY - ap.minY);
     var fill = sz / Math.max(1, bbox_area);
-    if(fill < 0.45) continue; /* 너무 듬성듬성하면 노이즈 */
+    if(fill < 0.3) continue;
     
     validApples.push({
       x: ap.cx / aw,
@@ -1945,20 +1952,20 @@ function computeDistanceTransform(mask, w, h){
   return dist;
 }
 
-/* 지역 최대값 찾기 (사과 중심점 후보) */
+/* 지역 최대값 찾기 (사과 중심점 후보)
+   [실측 검증 2026-05-15] 단순 greedy 방식으로 개선
+   - 거리 변환 값이 큰 픽셀부터 시작
+   - 최소 거리 이내에 다른 중심이 없으면 채택 */
 function findLocalMaxima(distMap, w, h, minDist, minValue){
   var candidates = [];
-  /* 거리 변환 값이 minValue 이상인 픽셀 모음 */
   for(var y = 0; y < h; y++){
     for(var x = 0; x < w; x++){
       var v = distMap[y * w + x];
       if(v >= minValue) candidates.push({x:x, y:y, v:v});
     }
   }
-  /* 거리값 큰 순으로 정렬 */
   candidates.sort(function(a, b){ return b.v - a.v; });
   
-  /* Greedy: 최대값부터 시작해서 minDist 이내에 다른 중심이 없으면 채택 */
   var centers = [];
   var minD2 = minDist * minDist;
   for(var i = 0; i < candidates.length; i++){

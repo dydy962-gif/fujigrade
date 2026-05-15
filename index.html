@@ -1496,7 +1496,7 @@ function detectApplesInBox(photoObj, idx){
     '{"apples":[{"x":0.15,"y":0.20,"r":0.08},{"x":0.30,"y":0.20,"r":0.08}],"tray_visible":true,"count":2,"quality_warning":null}\n\n' +
     '주의: 사과끼리 겹쳐 있어도 각각 따로 인식하세요. 사과가 아닌 것(잎, 그림자, 박스 글씨)은 제외하세요. 다른 텍스트 없이 JSON만 응답하세요.';
   
-  callAI(photoObj.compressedUrl, prompt, {maxTokens: 2000}).then(function(res){
+  callAI(photoObj.compressedUrl, prompt, {maxTokens: 2000, highAccuracy: true}).then(function(res){
     if(!res.success){
       console.error('[Box Detect] AI 호출 실패:', res.error);
       if(res.needsKey){
@@ -2846,8 +2846,12 @@ function applyAddrResult(lat,lon,displayName){
 var AIConfig = {
   PROVIDER_DEFAULT: 'anthropic',
   MODEL_DEFAULTS: {
-    anthropic: 'claude-sonnet-4-20250514'
+    anthropic: 'claude-sonnet-4-6'
     /* 향후: openai: 'gpt-4o', google: 'gemini-pro-vision' */
+  },
+  /* 박스 모드처럼 최고 정확도 필요한 경우용 */
+  MODEL_HIGH_ACCURACY: {
+    anthropic: 'claude-opus-4-7'
   },
   /* 현재 사용자 설정 가져오기 */
   get: function(){
@@ -2905,7 +2909,12 @@ function callAI(imageDataUrl, prompt, options){
   
   /* 프로바이더별 호출 분기 */
   if(cfg.provider==='anthropic'){
-    return callAI_Anthropic(imageDataUrl, prompt, options, keyInfo.key, cfg.model||AIConfig.MODEL_DEFAULTS.anthropic);
+    /* 박스 모드처럼 정확도가 중요하면 highAccuracy 옵션으로 Opus 사용 */
+    var model = cfg.model;
+    if(!model){
+      model = options.highAccuracy ? AIConfig.MODEL_HIGH_ACCURACY.anthropic : AIConfig.MODEL_DEFAULTS.anthropic;
+    }
+    return callAI_Anthropic(imageDataUrl, prompt, options, keyInfo.key, model);
   }
   /* 향후 추가:
   if(cfg.provider==='openai') return callAI_OpenAI(...);
@@ -3050,7 +3059,7 @@ function extractGPSFromImage(dataUrl,cb){
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
-      model:'claude-sonnet-4-20250514',
+      model:'claude-sonnet-4-6',
       max_tokens:400,
       messages:[{
         role:'user',
@@ -3314,7 +3323,7 @@ function scanWithClaudeVision(photoObj,idx){
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
-      model:'claude-sonnet-4-20250514',
+      model:'claude-sonnet-4-6',
       max_tokens:600,
       messages:[{
         role:'user',

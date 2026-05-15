@@ -1,12 +1,17 @@
 /**
- * Netlify Function: SAM3로 사과 자동 분할
+ * Netlify Function: SAM3 / YOLO 호출 시작
  * 
- * 모델: yodagg/sam3-image-seg
- * Version: 753fe4dbdd890a55e176f19b0603ae1b43c9e7fbd916070df53ffdb2451c7a57
+ * 변경 (2026-05-15): 타임아웃 회피를 위해 폴링 안 함
+ * - 함수는 Replicate 호출 시작만 → prediction ID 반환 (1초)
+ * - 프론트엔드가 직접 결과 폴링 (백그라운드)
  * 
- * 호출 방법:
- * POST /.netlify/functions/sam-yolo
- * Body: { mode: "sam3", image: "data:...", prompt: "apple" }
+ * 호출:
+ *   POST /.netlify/functions/sam-yolo
+ *   Body: { mode: "sam3" | "yolo" | "poll", image, prompt, predictionId }
+ * 
+ * 응답:
+ *   - 시작: { success: true, predictionId, getUrl }
+ *   - 폴링: { success: true, status, output }
  * 
  * 환경변수: REPLICATE_API_TOKEN
  */
@@ -44,17 +49,51 @@ exports.handler = async function(event, context) {
       statusCode: 500,
       headers,
       body: JSON.stringify({ 
-        error: 'REPLICATE_API_TOKEN 환경변수 없음. Netlify Settings → Environment variables에서 등록하세요.' 
+        error: 'REPLICATE_API_TOKEN 환경변수 없음' 
       })
     };
   }
 
   try {
     const body = JSON.parse(event.body);
-    const { mode, image, prompt, points, point_labels, class_names } = body;
+    const { mode, image, prompt, points, point_labels, class_names, predictionId } = body;
 
+    // === 폴링 모드: prediction ID로 상태 조회 ===
+    if (mode === 'poll') {
+      if (!predictionId) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'predictionId 필요' }) };
+      }
+      
+      const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+        headers: { 'Authorization': `Bearer ${apiToken}` }
+      });
+      
+      if (!pollRes.ok) {
+        const errText = await pollRes.text();
+        return {
+          statusCode: pollRes.status,
+          headers,
+          body: JSON.stringify({ error: `폴링 실패 (${pollRes.status})`, detail: errText })
+        };
+      }
+      
+      const result = await pollRes.json();
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          status: result.status,
+          output: result.output,
+          error: result.error,
+          predict_time: result.metrics?.predict_time
+        })
+      };
+    }
+
+    // === 시작 모드: SAM3 또는 YOLO 호출 ===
     if (!image) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'image는 필수입니다' }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'image 필수' }) };
     }
 
     let modelInfo, input;
@@ -85,10 +124,10 @@ exports.handler = async function(event, context) {
         return_json: true
       };
     } else {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'mode는 sam3 또는 yolo' }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'mode는 sam3, yolo, poll 중 하나' }) };
     }
 
-    // Replicate API 호출
+    // Replicate prediction 시작 — 결과 안 기다림
     const startRes = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
       headers: {
@@ -113,51 +152,15 @@ exports.handler = async function(event, context) {
 
     const prediction = await startRes.json();
     
-    // 폴링
-    let result = prediction;
-    let attempts = 0;
-    const MAX_ATTEMPTS = 90;
-    
-    while (
-      result.status !== 'succeeded' && 
-      result.status !== 'failed' && 
-      result.status !== 'canceled' &&
-      attempts < MAX_ATTEMPTS
-    ) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const pollRes = await fetch(result.urls.get, {
-        headers: { 'Authorization': `Bearer ${apiToken}` }
-      });
-      if (!pollRes.ok) {
-        return { statusCode: 500, headers, body: JSON.stringify({ error: '폴링 실패' }) };
-      }
-      result = await pollRes.json();
-      attempts++;
-    }
-
-    if (result.status === 'failed' || result.status === 'canceled') {
-      return {
-        statusCode: 500,
-        headers,
-        body: JSON.stringify({ 
-          error: `처리 실패: ${result.status}`,
-          detail: result.error || '알 수 없음'
-        })
-      };
-    }
-
-    if (result.status !== 'succeeded') {
-      return { statusCode: 504, headers, body: JSON.stringify({ error: '시간 초과 (90초)' }) };
-    }
-
+    // 즉시 ID만 반환 (폴링 없음 → 타임아웃 회피)
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         success: true,
-        mode: mode || 'sam3',
-        output: result.output,
-        predict_time: result.metrics?.predict_time
+        predictionId: prediction.id,
+        status: prediction.status,
+        mode: mode || 'sam3'
       })
     };
 

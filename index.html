@@ -1225,13 +1225,60 @@ function hideKreiSplash(){
     <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
         <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
-        <span style="font-size:12px;color:var(--cream);font-weight:600">10. 학술 참고문헌 (총 13편)</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">10. 학술 참고문헌 (총 14편)</span>
       </div>
       <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
-        <b>색 측정 기준 (C001~C005)</b>: Papadavid 2014, Sha 2019, Han 2022, Wang 2021, Arana 2012 — 모두 동료심사 학술지 (위 "색 측정 기준" 탭 참조)<br>
+        <b>색 측정 기준 (C001~C005)</b>: Papadavid 2014, Sha 2019, Han 2022, Wang 2021, Arana 2012 — 모두 동료심사 학술지<br>
         <b>기계비전·NIR (M001~M003)</b>: Sun 2022, Lu 2022, Kim 2024<br>
-        <b>국내 연구 (K001~K005)</b>: 잠 2014, 이 2022, 한 2014, 김 2021, 권 2025 (한국원예학회지·한국농림기상학회지 등)<br>
-        <b>활용</b>: 각 논문은 본 시스템의 측정 방법·기준값 설정 근거. 모든 DOI/PDF 링크 위 카테고리 탭에서 직접 확인 가능.
+        <b>국내 연구 (K001~K005)</b>: 잠 2014, 이 2022, 한 2014, 김 2021, 권 2025<br>
+        <b>AI 농업 응용 (A001)</b>: Ghose et al. 2025 — "YOLO-SAM AgriScan: A Unified Framework for Ripe Strawberry Detection and Segmentation" (Texas A&amp;M University, Sensors 25(24):7678, DOI: 10.3390/s25247678) — 본 시스템 박스 모드의 학술 근거<br>
+        <b>활용</b>: 각 논문은 본 시스템의 측정 방법·기준값 설정 근거.
+      </div>
+    </div>
+
+    <!-- 11. AI 모델 (외부) -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">11. 외부 AI 모델 (박스 모드)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        <b>SAM3 (Segment Anything Model 3)</b><br>
+        <span style="font-size:10px;color:var(--muted)">• 개발: Meta AI Research<br>
+        • 용도: 박스 사진에서 사과 픽셀 단위 외곽선 자동 추출<br>
+        • 라이선스: Apache 2.0 (상업적 이용 가능)<br>
+        • 호스팅: Replicate.com (yodagg/sam3-image-seg)<br>
+        • 본 시스템 활용: prompt="apple" 텍스트 기반 자동 분할</span><br><br>
+        <b>YOLO World XL</b> (보조용)<br>
+        <span style="font-size:10px;color:var(--muted)">• 개발: Tencent AI Lab<br>
+        • 용도: 사과 위치 사각 박스 검출 (SAM3 보조)<br>
+        • 라이선스: GPL-3.0<br>
+        • 호스팅: Replicate.com (franz-biz/yolo-world-xl)</span><br><br>
+        <b>Claude (Anthropic)</b> — 색 보정 분석<br>
+        <span style="font-size:10px;color:var(--muted)">• 모델: claude-sonnet-4-6 (Sonnet 4.6), claude-opus-4-7 (Opus 4.7)<br>
+        • 용도: 사진의 난좌 흰색 영역 분석, 화이트밸런스 보정 계수 산출<br>
+        • API: https://api.anthropic.com</span>
+      </div>
+    </div>
+
+    <!-- 12. 인프라 (외부 서비스) -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">12. 인프라 (외부 서비스)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        <b>Replicate.com</b> — AI 모델 호스팅 플랫폼<br>
+        <span style="font-size:10px;color:var(--muted)">• 용도: SAM3, YOLO 모델 API 제공<br>
+        • 과금: 사진당 약 0.005~0.01 USD (Pay as you go)<br>
+        • https://replicate.com</span><br><br>
+        <b>Netlify</b> — 사이트 호스팅 + 서버리스 함수<br>
+        <span style="font-size:10px;color:var(--muted)">• 용도: 정적 사이트 배포, API 키 안전 보관 (서버리스 함수)<br>
+        • 함수: /netlify/functions/sam-yolo.js (Replicate 호출), /netlify/functions/weather.js (기상청 API)<br>
+        • 무료 한도: 함수 월 12만5천번 호출</span><br><br>
+        <b>GitHub</b> — 소스 코드 관리<br>
+        <span style="font-size:10px;color:var(--muted)">• 저장소: github.com/dydy962-gif/fujigrade<br>
+        • 자동 배포 연동: GitHub push → Netlify 자동 빌드</span>
       </div>
     </div>
 
@@ -1239,7 +1286,7 @@ function hideKreiSplash(){
     <div style="margin-top:14px;padding:10px 12px;background:rgba(0,86,102,.15);border-left:3px solid #008486;border-radius:4px;font-size:10px;color:var(--cream);line-height:1.6">
       <b style="color:#7fd3d3">📝 데이터 정확성 약속</b><br>
       FujiGrade는 학술 연구 도구이며, 본 명세서에 누락된 자료가 발견되거나 더 정확한 공식 데이터(특히 농촌진흥청 「홍로 판정판」)를 확보하면 즉시 갱신합니다. 데이터 오류·누락 제보는 GitHub 이슈로 받습니다.<br>
-      <span style="color:var(--muted);font-size:9px">최종 갱신: 2026-05-14 / 프로젝트 라이선스: 미정 (학술 연구용)</span>
+      <span style="color:var(--muted);font-size:9px">최종 갱신: 2026-05-15 (박스 모드 SAM3 통합) / 프로젝트 라이선스: 미정 (학술 연구용)</span>
     </div>
   </div>
 
@@ -1620,9 +1667,9 @@ function applyWhiteBalance(photoObj, idx){
 function callSAM3(photoObj, idx){
   setBoxStatus('sam3');
   
-  /* 보정된 이미지 (또는 원본) base64로 전송 */
   var imageData = photoObj.correctedUrl || photoObj.compressedUrl;
   
+  /* Step 1: Replicate prediction 시작 — 함수는 1초 안에 끝남 (타임아웃 회피) */
   fetch('/.netlify/functions/sam-yolo', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -1634,44 +1681,99 @@ function callSAM3(photoObj, idx){
   })
   .then(function(r){
     if(!r.ok){
-      return r.json().then(function(err){
-        throw new Error(err.error || ('HTTP '+r.status));
+      return r.text().then(function(t){
+        var msg;
+        try { msg = JSON.parse(t).error; } catch(e){ msg = 'HTTP '+r.status; }
+        throw new Error(msg);
       });
     }
     return r.json();
   })
   .then(function(data){
-    if(!data.success || !data.output){
-      throw new Error(data.error || 'SAM3 응답 형식 오류');
+    if(!data.success || !data.predictionId){
+      throw new Error(data.error || 'prediction ID 없음');
     }
     
-    console.log('[SAM3] 응답:', data.output);
+    console.log('[SAM3] Prediction 시작:', data.predictionId);
+    photoObj.sam3PredictionId = data.predictionId;
     
-    /* SAM3 출력 처리:
-       output은 보통 다음 중 하나:
-       - 폴리곤 배열: [{points: [[x,y],...], score: 0.95}, ...]
-       - 마스크 URL 배열: ["https://...mask1.png", ...]
-       - 객체: {polygons: [...], scores: [...], masks: [...]}
-    */
-    var apples = parseSAM3Output(data.output, photoObj);
-    
-    if(!apples || apples.length === 0){
-      toast('⚠ SAM3가 사과를 찾지 못함. 사진을 다시 확인하세요.');
-      setBoxStatus('error');
-      return;
-    }
-    
-    photoObj.detectedApples = apples;
-    photoObj.sam3Output = data.output;
-    redraw();
-    toast('✅ SAM3 검출 완료: 사과 ' + apples.length + '개');
-    setBoxStatus('detected', apples.length);
+    /* Step 2: 클라이언트가 직접 결과 폴링 (Netlify 타임아웃 회피) */
+    return pollSAM3Result(photoObj, data.predictionId, 0);
   })
   .catch(function(e){
     console.error('[SAM3] 오류:', e);
     toast('⚠ SAM3 호출 실패: ' + e.message);
     setBoxStatus('error');
   });
+}
+
+/* SAM3 결과 폴링 — 1초마다 함수 호출해서 상태 확인
+   최대 120초 (보통 30~90초 안에 완료) */
+function pollSAM3Result(photoObj, predictionId, attempt){
+  var MAX_ATTEMPTS = 120;
+  
+  if(attempt >= MAX_ATTEMPTS){
+    toast('⚠ SAM3 시간 초과 (2분)');
+    setBoxStatus('error');
+    return;
+  }
+  
+  /* 진행 상황 표시 */
+  if(attempt > 0 && attempt % 10 === 0){
+    var statusEl = document.getElementById('boxStatus');
+    if(statusEl){
+      statusEl.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(170,100,255,.1);border-radius:6px;border-left:3px solid #aa64ff">🎯 <b>SAM3 분석 중...</b> <span style="color:var(--muted);font-size:11px">' + attempt + '초 경과 (보통 30~90초)</span></div>';
+    }
+  }
+  
+  return new Promise(function(resolve){ setTimeout(resolve, 1000); })
+    .then(function(){
+      return fetch('/.netlify/functions/sam-yolo', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          mode: 'poll',
+          predictionId: predictionId
+        })
+      });
+    })
+    .then(function(r){
+      if(!r.ok){
+        return r.text().then(function(t){
+          var msg;
+          try { msg = JSON.parse(t).error; } catch(e){ msg = 'HTTP '+r.status; }
+          throw new Error(msg);
+        });
+      }
+      return r.json();
+    })
+    .then(function(data){
+      if(data.status === 'succeeded'){
+        console.log('[SAM3] 완료, 응답:', data.output);
+        var apples = parseSAM3Output(data.output, photoObj);
+        if(!apples || apples.length === 0){
+          toast('⚠ SAM3가 사과를 찾지 못함');
+          setBoxStatus('error');
+          return;
+        }
+        photoObj.detectedApples = apples;
+        photoObj.sam3Output = data.output;
+        redraw();
+        toast('✅ SAM3 검출 완료: 사과 ' + apples.length + '개 (' + (data.predict_time || '?') + '초)');
+        setBoxStatus('detected', apples.length);
+      } else if(data.status === 'failed' || data.status === 'canceled'){
+        toast('⚠ SAM3 처리 실패: ' + (data.error || data.status));
+        setBoxStatus('error');
+      } else {
+        /* 아직 처리 중 → 재시도 */
+        return pollSAM3Result(photoObj, predictionId, attempt + 1);
+      }
+    })
+    .catch(function(e){
+      console.error('[SAM3 폴링] 오류:', e);
+      toast('⚠ 폴링 실패: ' + e.message);
+      setBoxStatus('error');
+    });
 }
 
 /* SAM3 출력을 표준 사과 배열로 변환 */

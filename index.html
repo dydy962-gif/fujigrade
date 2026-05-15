@@ -1726,7 +1726,8 @@ function pollSAM3Result(photoObj, predictionId, attempt){
     }
   }
   
-  return new Promise(function(resolve){ setTimeout(resolve, 1000); })
+  /* 5초 간격 폴링 — 1초는 Replicate Rate Limit(429) 유발 */
+  return new Promise(function(resolve){ setTimeout(resolve, 5000); })
     .then(function(){
       return fetch('/.netlify/functions/sam-yolo', {
         method: 'POST',
@@ -1781,28 +1782,59 @@ function parseSAM3Output(output, photoObj){
   var apples = [];
   var imgW = photoObj.img.naturalWidth || photoObj.img.width;
   var imgH = photoObj.img.naturalHeight || photoObj.img.height;
-  
-  /* Case A: output이 배열 (폴리곤 또는 마스크 URL) */
-  if(Array.isArray(output)){
-    for(var i = 0; i < output.length; i++){
-      var item = output[i];
-      var apple = parseSAM3Item(item, imgW, imgH, i);
-      if(apple) apples.push(apple);
-    }
-  }
-  /* Case B: output이 객체 */
-  else if(typeof output === 'object'){
-    /* polygons 키 있으면 */
-    if(output.polygons && Array.isArray(output.polygons)){
+
+  console.log('[parseSAM3Output] output type:', typeof output, 'isArray:', Array.isArray(output));
+  if(output && typeof output === 'object') console.log('[parseSAM3Output] keys:', Object.keys(output));
+
+  /* ── 실제 SAM3 응답: {orig_img_h, orig_img_w, pred_boxes, pred_polygons, ...} ── */
+  if(output && typeof output === 'object' && !Array.isArray(output)){
+
+    /* Case A: pred_polygons 키 (return_polygons:true 일 때 우선) */
+    if(output.pred_polygons && Array.isArray(output.pred_polygons) && output.pred_polygons.length > 0){
+      console.log('[parseSAM3Output] pred_polygons 형식, 개수:', output.pred_polygons.length);
+      var refW = output.orig_img_w || imgW;
+      var refH = output.orig_img_h || imgH;
+      for(var i = 0; i < output.pred_polygons.length; i++){
+        var poly = output.pred_polygons[i];
+        var score = (output.pred_scores && output.pred_scores[i] != null) ? output.pred_scores[i] : 1.0;
+        var apple = parseSAM3Polygon(poly, score, refW, refH, i);
+        if(apple) apples.push(apple);
+      }
+
+    /* Case B: pred_boxes 키 [cx, cy, w, h] 정규화 0~1 */
+    } else if(output.pred_boxes && Array.isArray(output.pred_boxes) && output.pred_boxes.length > 0){
+      console.log('[parseSAM3Output] pred_boxes 형식, 개수:', output.pred_boxes.length);
+      for(var i = 0; i < output.pred_boxes.length; i++){
+        var box = output.pred_boxes[i];
+        if(!Array.isArray(box) || box.length < 4) continue;
+        var cx = box[0], cy = box[1], bw = box[2], bh = box[3];
+        /* YOLO 형식 [cx,cy,w,h] 0~1 → 폴리곤 4점으로 변환 */
+        var x1 = cx - bw/2, y1 = cy - bh/2;
+        var x2 = cx + bw/2, y2 = cy + bh/2;
+        var score = (output.pred_scores && output.pred_scores[i] != null) ? output.pred_scores[i] : 1.0;
+        var r = Math.sqrt((bw/2)*(bw/2) + (bh/2)*(bh/2));
+        apples.push({
+          x: cx, y: cy, r: r,
+          polygon: [[x1,y1],[x2,y1],[x2,y2],[x1,y2]],
+          maskUrl: null,
+          score: score,
+          idx: i + 1
+        });
+      }
+
+    /* Case C: polygons 키 */
+    } else if(output.polygons && Array.isArray(output.polygons)){
+      console.log('[parseSAM3Output] polygons 형식, 개수:', output.polygons.length);
       for(var i = 0; i < output.polygons.length; i++){
         var poly = output.polygons[i];
         var score = output.scores ? output.scores[i] : 1.0;
         var apple = parseSAM3Polygon(poly, score, imgW, imgH, i);
         if(apple) apples.push(apple);
       }
-    }
-    /* masks 키 있으면 (마스크 이미지 URL 배열) */
-    else if(output.masks && Array.isArray(output.masks)){
+
+    /* Case D: masks 키 (이미지 URL 배열) */
+    } else if(output.masks && Array.isArray(output.masks)){
+      console.log('[parseSAM3Output] masks 형식, 개수:', output.masks.length);
       for(var i = 0; i < output.masks.length; i++){
         apples.push({
           x: 0.5, y: 0.5, r: 0.05,
@@ -1812,9 +1844,25 @@ function parseSAM3Output(output, photoObj){
           idx: i + 1
         });
       }
+
+    } else {
+      console.warn('[parseSAM3Output] 알 수 없는 객체 형식. keys:', Object.keys(output));
     }
+
+  /* ── output이 배열인 경우 ── */
+  } else if(Array.isArray(output)){
+    console.log('[parseSAM3Output] 배열 형식, 개수:', output.length);
+    for(var i = 0; i < output.length; i++){
+      var item = output[i];
+      var apple = parseSAM3Item(item, imgW, imgH, i);
+      if(apple) apples.push(apple);
+    }
+
+  } else {
+    console.warn('[parseSAM3Output] output이 null이거나 처리 불가:', output);
   }
-  
+
+  console.log('[parseSAM3Output] 최종 사과 개수:', apples.length);
   return apples;
 }
 

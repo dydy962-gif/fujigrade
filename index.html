@@ -674,10 +674,10 @@ function hideKreiSplash(){
       <!-- 박스 모드 업로드 영역 (5-1 작업) -->
       <div id="uploadAreaBox" style="display:none">
         <div class="upload-btn" style="border-color:rgba(140,196,74,.4);background:rgba(140,196,74,.05)">
-          <input type="file" id="fileBox" accept="image/*" onchange="onBoxFile(this.files)">
+          <input type="file" id="fileBox" accept="image/*" multiple onchange="onBoxFile(this.files)">
           <div class="up-icon">📦</div>
           <div class="up-title">난좌 박스 사진</div>
-          <div class="up-sub">클릭 또는 드래그 · 1장만</div>
+          <div class="up-sub">클릭 또는 드래그 · 여러 장 가능</div>
         </div>
         <div style="margin-top:8px;font-size:10px;color:var(--muted);line-height:1.6;padding:8px;background:rgba(0,0,0,.15);border-radius:4px">
           💡 <b>좋은 촬영 팁</b>: ① 박스 바로 위에서 ② 그늘에서 (직사광선 피하기) ③ 사과들이 서로 닿지 않게 ④ 난좌 흰색 영역이 충분히 보이게
@@ -689,17 +689,15 @@ function hideKreiSplash(){
       <!-- 박스 모드 상태 표시 (5-3 작업) -->
       <div id="boxStatus" style="margin:8px 0"></div>
 
-      <!-- 박스 모드 검토 바 (5-4 작업) -->
+      <!-- 박스 모드 검토 바 (5-4 작업, 픽셀 검출용으로 단순화) -->
       <div id="boxReviewBar" style="display:none;flex-direction:column;gap:8px;margin:8px 0;padding:10px;background:rgba(0,86,102,.1);border:1px solid rgba(0,132,134,.3);border-radius:var(--r)">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:600;color:#7fd3d3;margin-right:4px">📝 검토:</span>
-          <button class="tb on" id="boxReviewBtn_add" onclick="setBoxReviewMode('add')">➕ 추가</button>
-          <button class="tb" id="boxReviewBtn_delete" onclick="setBoxReviewMode('delete')">🗑 삭제</button>
-          <button class="tb" id="boxReviewBtn_move" onclick="setBoxReviewMode('move')">✋ 이동</button>
-          <button class="tb" onclick="rerunBoxDetection()" style="margin-left:auto;font-size:11px">🔄 AI 다시</button>
+          <button class="tb" id="boxReviewBtn_delete" onclick="setBoxReviewMode('delete')">🗑 잘못 검출 삭제</button>
+          <button class="tb" onclick="rerunBoxDetection()" style="margin-left:auto;font-size:11px">🔄 다시 검출</button>
         </div>
-        <div id="boxReviewTip" style="font-size:11px;color:var(--muted);line-height:1.5">💡 빈 공간을 클릭하면 사과가 추가됩니다.</div>
-        <button onclick="startBoxColorCorrection()" style="padding:10px;background:var(--accent);color:var(--bg);border:none;border-radius:var(--r);font-weight:700;cursor:pointer;font-size:13px;font-family:var(--fm)">🎨 색 보정 + 측정 시작 →</button>
+        <div id="boxReviewTip" style="font-size:11px;color:var(--muted);line-height:1.5">💡 사과 번호를 클릭하면 잘못 검출된 영역을 삭제할 수 있습니다. AI가 자동으로 픽셀 단위 검출했으니 정확도가 높습니다.</div>
+        <button onclick="startBoxColorCorrection()" style="padding:10px;background:var(--accent);color:var(--bg);border:none;border-radius:var(--r);font-weight:700;cursor:pointer;font-size:13px;font-family:var(--fm)">🔬 측정 시작 (LAB a* 분석) →</button>
       </div>
 
       <!-- 캔버스 -->
@@ -1425,126 +1423,428 @@ function onFiles(files){
   for(var i=0;i<files.length;i++) addPhoto(files[i]);
 }
 
-/* ── 파일 업로드 (박스 모드) ── (5-3 작업: AI 검출 추가)
-   박스 모드는 단일 모드와 다름:
-   - 1장만 업로드 (난좌 박스)
-   - AI가 사과+난좌 자동 검출
-   - 사용자가 검토하고 수정
-   - 자동 색 보정 후 일괄 측정 */
+/* ── 파일 업로드 (박스 모드) ── 
+   여러 박스 사진 지원 (재설계 2026-05-15)
+   각 사진을 개별 처리 → photos 배열에 추가 */
 function onBoxFile(files){
   if(!files||!files.length) return;
-  var file=files[0];
-  processImageFile(file, function(result){
-    /* 박스 모드는 photos 배열 비우고 1장만 유지 */
-    photos = [];
-    var obj={
-      img:result.displayImg,
-      url:result.displayUrl,
-      compressedUrl:result.compressedUrl,
-      file:file,
-      apples:[],cardRs:{},res:null,mode:'box',
-      orientation:result.orientation,
-      origSize:result.origSize,
-      displaySize:result.displaySize,
-      /* 박스 모드 전용 필드 */
-      trayMask:null,
-      trayAvgRGB:null,
-      detectedApples:null,
-      wbCorrected:false,
-      boxResult:null
-    };
-    photos.push(obj);
-    aIdx=0;
-    renderPhotoGrid();
-    selPhoto(0);
-    toast('📦 박스 사진 업로드 완료. AI 자동 검출 시작...');
-    /* 자동 AI 검출 시작 */
-    setTimeout(function(){
-      detectApplesInBox(obj, 0);
-    }, 500);
-  });
+  for(var i=0; i<files.length; i++){
+    (function(file, fileIdx){
+      processImageFile(file, function(result){
+        var idx=photos.length;
+        var obj={
+          img:result.displayImg,
+          url:result.displayUrl,
+          compressedUrl:result.compressedUrl,
+          file:file,
+          apples:[],cardRs:{},res:null,mode:'box',
+          orientation:result.orientation,
+          origSize:result.origSize,
+          displaySize:result.displaySize,
+          /* 박스 모드 전용 필드 */
+          aiAnalysis:null,
+          trayAvgRGB:null,
+          correctedCanvas:null,
+          correctedUrl:null,
+          wbCorrection:null,
+          wbCorrected:false,
+          analysisCanvas:null,  /* 사과/난좌 마스크 저장 */
+          detectedApples:null,
+          boxResult:null
+        };
+        photos.push(obj);
+        if(idx===0 || aIdx<0){
+          aIdx=idx;
+          selPhoto(idx);
+        } else {
+          renderPhotoGrid();
+        }
+        toast('📦 박스 사진 '+(fileIdx+1)+'/'+files.length+' 업로드 — AI 분석 시작');
+        /* 자동으로 처리 시작 */
+        setTimeout(function(){
+          detectApplesInBox(obj, idx);
+        }, 500 + fileIdx * 300);
+      });
+    })(files[i], i);
+  }
 }
 
 /* ════════════════════════════════════════════════════
-   박스 모드 AI 사과 + 난좌 검출 (5-3 작업)
+   박스 모드 처리 — 3단계 (재설계 2026-05-15)
    ════════════════════════════════════════════════════
-   Claude Vision에게 사진을 보내서:
-   1. 사과 모든 개수의 중심 좌표 + 반지름 검출
-   2. 흰색 난좌 영역 확인 (분명히 있는지)
-   3. 사과 종류·등급 거친 추정 (선택)
+   Phase 1: AI가 색 보정 매개변수 분석
+            - 난좌 흰색 영역에서 가장 깨끗한 부분 찾기
+            - 그 영역의 RGB를 (255,255,255)로 만드는 보정 계수 산출
+            - JavaScript가 사진 전체 보정
    
-   응답을 받으면 사용자가 검토/수정할 수 있는 UI로 전달 */
+   Phase 2: JavaScript 픽셀 기반 검출
+            - 보정된 사진에서 흰색 난좌 영역 마스크 만들기
+            - 난좌 마스크 안쪽에서 빨간색 영역만 찾기 (사과)
+            - 난좌 밖 빨강(흙, 풀 등)은 자동으로 무시
+            - Connected Component로 개별 사과 분리
+   
+   Phase 3: 측정 + 결과
+            - 각 사과 영역 LAB 측정
+            - 평균 착색률 산출
+            - 라벨링된 결과 사진
+   ════════════════════════════════════════════════════ */
+
+/* Phase 1 시작점 — 박스 사진 업로드 후 자동 호출 */
 function detectApplesInBox(photoObj, idx){
-  /* 키 확인 먼저 */
   var keyInfo = AIConfig.getActiveKey();
   if(!keyInfo.key){
     toast('⚠ API 키가 없습니다. 우측 상단 🔑 AI 버튼으로 키를 등록하세요.');
-    /* 검출 실패 → 수동 모드 안내 */
     setBoxStatus('keyMissing');
     return;
   }
   
-  setBoxStatus('detecting');
+  setBoxStatus('analyzing');
   
-  /* AI에게 보낼 프롬프트 — 정확성 최우선 */
-  var prompt = '이 사진은 사과(후지 또는 홍로) 난좌(흰색 EPS 폼 트레이) 박스입니다. 다음 정보를 JSON으로만 응답하세요.\n\n' +
-    '1. apples: 사진 속 모든 사과의 위치. 각 사과마다 {x, y, r} 형식 (x,y=중심좌표, r=반지름, 모두 0~1로 정규화된 값, x는 좌→우, y는 상→하).\n' +
-    '2. tray_visible: 흰색 난좌 영역이 분명히 보이는지 (true/false).\n' +
-    '3. count: 검출된 사과 개수.\n' +
-    '4. quality_warning: 사진 품질 문제 (그림자 강함, 과노출, 흐림 등). 없으면 null.\n\n' +
-    '응답 예시:\n' +
-    '{"apples":[{"x":0.15,"y":0.20,"r":0.08},{"x":0.30,"y":0.20,"r":0.08}],"tray_visible":true,"count":2,"quality_warning":null}\n\n' +
-    '주의: 사과끼리 겹쳐 있어도 각각 따로 인식하세요. 사과가 아닌 것(잎, 그림자, 박스 글씨)은 제외하세요. 다른 텍스트 없이 JSON만 응답하세요.';
+  /* AI에 색 보정 분석 요청 — 위치 검출이 아니라 색 보정만 */
+  var prompt = '이 사진은 사과 난좌(흰색 EPS 폼 트레이) 박스입니다. 색 보정을 위한 정보만 분석하세요.\n\n' +
+    '난좌의 흰색 영역 중 "가장 깨끗하고 밝은 부분(그림자 없음, 사과·얼룩 없음, 직사광선 없음)"을 찾아서 그 영역의 평균 RGB 값을 측정하세요.\n\n' +
+    'JSON으로만 응답:\n' +
+    '{"tray_white_rgb":{"r":240,"g":238,"b":235},"tray_visible":true,"shadow_warning":"그림자가 강합니다"|null,"color_temp":"중성"|"노란빛"|"푸른빛","apple_count_estimate":15}\n\n' +
+    '- tray_white_rgb: 가장 깨끗한 흰색 영역의 평균 RGB (0~255)\n' +
+    '- tray_visible: 흰색 난좌가 분명히 보이는지 (false면 보정 불가)\n' +
+    '- shadow_warning: 그림자가 강해서 측정 정확도가 떨어질 수 있으면 메시지, 아니면 null\n' +
+    '- color_temp: 사진의 전반적인 색온도\n' +
+    '- apple_count_estimate: 사과 대략적인 개수 (검증용, 정확하지 않아도 됨)\n\n' +
+    '다른 텍스트 없이 JSON만 응답하세요.';
   
-  callAI(photoObj.compressedUrl, prompt, {maxTokens: 2000, highAccuracy: true}).then(function(res){
+  callAI(photoObj.compressedUrl, prompt, {maxTokens: 500, highAccuracy: false}).then(function(res){
     if(!res.success){
-      console.error('[Box Detect] AI 호출 실패:', res.error);
+      console.error('[Phase1] AI 호출 실패:', res.error);
       if(res.needsKey){
-        toast('⚠ API 키 필요. 🔑 AI 버튼으로 등록하세요.');
+        toast('⚠ API 키 필요');
         setBoxStatus('keyMissing');
       } else {
-        toast('⚠ AI 검출 실패: ' + res.error);
+        toast('⚠ AI 분석 실패: ' + res.error);
         setBoxStatus('error');
       }
       return;
     }
     
-    /* JSON 파싱 */
     var data = parseAIJson(res.text);
-    if(!data || !data.apples || !Array.isArray(data.apples)){
-      console.error('[Box Detect] JSON 파싱 실패. 응답:', res.text);
-      toast('⚠ AI 응답을 이해할 수 없습니다. 수동 마킹으로 진행하세요.');
+    if(!data || !data.tray_white_rgb){
+      console.error('[Phase1] JSON 파싱 실패. 응답:', res.text);
+      toast('⚠ AI 응답 파싱 실패');
       setBoxStatus('error');
       return;
     }
     
-    /* 검출 결과 저장 */
-    photoObj.detectedApples = data.apples;
-    photoObj.trayVisible = !!data.tray_visible;
-    photoObj.qualityWarning = data.quality_warning || null;
-    
-    /* 캔버스에 검출 결과 그리기 */
-    drawDetectedApples(photoObj);
-    
-    /* 사용자 안내 */
-    var msg = '🤖 AI 검출 완료: 사과 ' + data.apples.length + '개';
-    if(data.quality_warning) msg += ' (' + data.quality_warning + ')';
-    toast(msg);
-    
-    setBoxStatus('detected', data.apples.length);
-    
     if(!data.tray_visible){
+      toast('⚠ 흰색 난좌가 안 보입니다. 색 보정 불가.');
+      setBoxStatus('error');
+      return;
+    }
+    
+    /* AI 분석 결과 저장 */
+    photoObj.aiAnalysis = data;
+    photoObj.trayAvgRGB = data.tray_white_rgb;
+    
+    if(data.shadow_warning){
       setTimeout(function(){
-        toast('⚠ 난좌(흰색 트레이)가 잘 안 보입니다. 색 보정 정확도가 낮을 수 있습니다.');
+        toast('⚠ ' + data.shadow_warning);
       }, 1500);
     }
+    
+    toast('🤖 AI 색 분석 완료. 사진 보정 시작...');
+    
+    /* Phase 1-2: 사진 보정 적용 (JavaScript) */
+    setTimeout(function(){
+      applyWhiteBalance(photoObj, idx);
+    }, 400);
   });
+}
+
+/* ────────────────────────────────────────────────────
+   Phase 1-2: 화이트밸런스 보정 (JavaScript)
+   AI가 알려준 흰색 RGB → (255,255,255)로 변환하는 계수 적용
+   ──────────────────────────────────────────────────── */
+function applyWhiteBalance(photoObj, idx){
+  setBoxStatus('correcting');
+  
+  var rgb = photoObj.trayAvgRGB;
+  if(!rgb || !rgb.r || !rgb.g || !rgb.b){
+    toast('⚠ 보정 기준 RGB 없음');
+    setBoxStatus('error');
+    return;
+  }
+  
+  /* 보정 계수: 255 / 현재값 (단, 너무 크지 않게 클램핑) */
+  var kR = Math.min(2.0, 255 / rgb.r);
+  var kG = Math.min(2.0, 255 / rgb.g);
+  var kB = Math.min(2.0, 255 / rgb.b);
+  
+  /* 캔버스에 그려서 픽셀 단위로 보정 */
+  var srcCanvas = document.createElement('canvas');
+  srcCanvas.width = photoObj.img.naturalWidth;
+  srcCanvas.height = photoObj.img.naturalHeight;
+  var sctx = srcCanvas.getContext('2d');
+  sctx.drawImage(photoObj.img, 0, 0);
+  
+  var imgData = sctx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+  var pixels = imgData.data;
+  
+  for(var i = 0; i < pixels.length; i += 4){
+    pixels[i]     = Math.min(255, pixels[i]     * kR); /* R */
+    pixels[i + 1] = Math.min(255, pixels[i + 1] * kG); /* G */
+    pixels[i + 2] = Math.min(255, pixels[i + 2] * kB); /* B */
+    /* Alpha (i+3)는 그대로 */
+  }
+  
+  sctx.putImageData(imgData, 0, 0);
+  
+  /* 보정된 이미지를 photoObj에 저장 */
+  photoObj.correctedCanvas = srcCanvas;
+  photoObj.correctedUrl = srcCanvas.toDataURL('image/jpeg', 0.92);
+  photoObj.wbCorrection = {kR: kR, kG: kG, kB: kB, source: rgb};
+  photoObj.wbCorrected = true;
+  
+  /* 보정된 이미지로 표시 이미지 교체 */
+  var newImg = new Image();
+  newImg.onload = function(){
+    photoObj.img = newImg;
+    photoObj.url = photoObj.correctedUrl;
+    redraw();
+    toast('✨ 색 보정 완료. 사과 검출 시작...');
+    
+    /* Phase 2 시작 */
+    setTimeout(function(){
+      detectApplesByPixel(photoObj, idx);
+    }, 400);
+  };
+  newImg.src = photoObj.correctedUrl;
+}
+
+/* ────────────────────────────────────────────────────
+   Phase 2: 픽셀 기반 사과 검출
+   1) 흰색 난좌 마스크 만들기
+   2) 난좌 내부의 빨간색만 검출
+   3) Connected Component로 개별 사과 분리
+   ──────────────────────────────────────────────────── */
+function detectApplesByPixel(photoObj, idx){
+  setBoxStatus('detecting');
+  
+  /* 분석은 보정된 캔버스에서 수행 */
+  var srcCanvas = photoObj.correctedCanvas;
+  if(!srcCanvas){
+    toast('⚠ 보정된 이미지 없음');
+    setBoxStatus('error');
+    return;
+  }
+  
+  /* 성능을 위해 작은 사이즈로 축소해서 분석 (500px 정도) */
+  var ANALYSIS_SIZE = 500;
+  var scale = Math.min(1, ANALYSIS_SIZE / Math.max(srcCanvas.width, srcCanvas.height));
+  var aw = Math.round(srcCanvas.width * scale);
+  var ah = Math.round(srcCanvas.height * scale);
+  
+  var aCanvas = document.createElement('canvas');
+  aCanvas.width = aw;
+  aCanvas.height = ah;
+  var actx = aCanvas.getContext('2d');
+  actx.drawImage(srcCanvas, 0, 0, aw, ah);
+  
+  var imgData = actx.getImageData(0, 0, aw, ah);
+  var pixels = imgData.data;
+  
+  /* ── Step 1: 흰색 난좌 마스크 ── */
+  /* 흰색 기준: R+G+B > 600 (밝음) AND 채도 낮음 (R,G,B 차이 < 30) */
+  var trayMask = new Uint8Array(aw * ah);
+  for(var y = 0; y < ah; y++){
+    for(var x = 0; x < aw; x++){
+      var idx_p = (y * aw + x) * 4;
+      var r = pixels[idx_p], g = pixels[idx_p+1], b = pixels[idx_p+2];
+      var bright = r + g + b;
+      var maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
+      var sat = maxC - minC;
+      /* 밝고 채도 낮음 = 흰색 (난좌) */
+      if(bright > 580 && sat < 35){
+        trayMask[y * aw + x] = 1;
+      }
+    }
+  }
+  
+  /* 난좌 마스크에 morphological closing (작은 구멍 메우기)
+     실제로는 단순화: 주변 5x5 중 절반 이상 흰색이면 흰색으로 */
+  var trayMaskFilled = new Uint8Array(aw * ah);
+  for(var y = 2; y < ah - 2; y++){
+    for(var x = 2; x < aw - 2; x++){
+      var cnt = 0;
+      for(var dy = -2; dy <= 2; dy++){
+        for(var dx = -2; dx <= 2; dx++){
+          if(trayMask[(y+dy) * aw + (x+dx)]) cnt++;
+        }
+      }
+      /* 25개 중 8개 이상이면 채워진 영역으로 본다 */
+      if(cnt >= 8) trayMaskFilled[y * aw + x] = 1;
+    }
+  }
+  
+  /* ── Step 2: 난좌 마스크의 "내부" 영역 만들기 ──
+     "흰색 내부의 빨강만" — 사용자 요청 핵심.
+     난좌 마스크를 약간 확장(dilation)해서 사과가 살짝 튀어나와도 포함시킴. */
+  var trayInside = new Uint8Array(aw * ah);
+  var DILATE = 25; /* 픽셀 단위 — 사과 1개 반지름의 대략값 */
+  /* 빠른 dilation: 흰색이거나, 흰색에서 DILATE 거리 이내면 "내부"로 본다 */
+  for(var y = 0; y < ah; y++){
+    for(var x = 0; x < aw; x++){
+      if(trayMaskFilled[y * aw + x]){
+        trayInside[y * aw + x] = 1;
+        continue;
+      }
+      /* 주변에 흰색이 있는지 sparse 체크 (성능) */
+      var found = false;
+      for(var dy = -DILATE; dy <= DILATE && !found; dy += 4){
+        for(var dx = -DILATE; dx <= DILATE && !found; dx += 4){
+          var ny = y + dy, nx = x + dx;
+          if(ny < 0 || ny >= ah || nx < 0 || nx >= aw) continue;
+          if(Math.sqrt(dx*dx + dy*dy) > DILATE) continue;
+          if(trayMaskFilled[ny * aw + nx]){
+            found = true;
+          }
+        }
+      }
+      if(found) trayInside[y * aw + x] = 1;
+    }
+  }
+  
+  /* ── Step 3: 난좌 내부의 빨강 픽셀만 추출 (사과) ── */
+  /* 빨강 기준: R 우세 + 채도 충분 */
+  var appleMask = new Uint8Array(aw * ah);
+  var appleCount = 0;
+  for(var y = 0; y < ah; y++){
+    for(var x = 0; x < aw; x++){
+      var p = y * aw + x;
+      if(!trayInside[p]) continue; /* 난좌 내부만 */
+      if(trayMaskFilled[p]) continue; /* 흰색 자체는 제외 */
+      var idx_p = p * 4;
+      var r = pixels[idx_p], g = pixels[idx_p+1], b = pixels[idx_p+2];
+      /* 사과 색 기준: 
+         - 빨강/분홍/노랑 모두 포함 (사과는 다양한 색)
+         - R이 G/B 평균보다 우세
+         - 너무 어둡지 않음
+         - 너무 흰색에 가깝지 않음 */
+      var redDominance = r - (g + b) / 2;
+      var notTooLight = (r + g + b) < 700;
+      var notTooDark = (r + g + b) > 180;
+      var hasSaturation = Math.max(r, g, b) - Math.min(r, g, b) > 20;
+      if(redDominance > 10 && notTooLight && notTooDark && hasSaturation){
+        appleMask[p] = 1;
+        appleCount++;
+      }
+    }
+  }
+  
+  /* ── Step 4: Connected Component로 개별 사과 분리 ── */
+  var components = findConnectedComponents(appleMask, aw, ah);
+  /* 너무 작거나 너무 큰 컴포넌트 필터링 */
+  var minSize = (aw * ah) / 500; /* 사진의 1/500 이상 */
+  var maxSize = (aw * ah) / 15;  /* 1/15 이하 */
+  var validApples = [];
+  for(var i = 0; i < components.length; i++){
+    var c = components[i];
+    if(c.size >= minSize && c.size <= maxSize){
+      /* 중심 좌표를 0~1로 정규화 */
+      validApples.push({
+        x: c.cx / aw,
+        y: c.cy / ah,
+        r: Math.sqrt(c.size / Math.PI) / Math.min(aw, ah),
+        size: c.size,
+        bounds: {
+          x1: c.minX / aw, y1: c.minY / ah,
+          x2: c.maxX / aw, y2: c.maxY / ah
+        },
+        /* 픽셀 마스크 저장 (정확한 영역) */
+        pixelMask: c.pixels
+      });
+    }
+  }
+  
+  /* ── 분석 결과 저장 ── */
+  photoObj.detectedApples = validApples;
+  photoObj.analysisCanvas = {
+    width: aw, height: ah,
+    trayMask: trayMaskFilled,
+    appleMask: appleMask,
+    trayInside: trayInside
+  };
+  
+  if(validApples.length === 0){
+    toast('⚠ 사과를 검출하지 못했습니다. 사진을 확인하세요.');
+    setBoxStatus('error');
+    return;
+  }
+  
+  redraw();
+  toast('✅ 검출 완료: 사과 ' + validApples.length + '개');
+  setBoxStatus('detected', validApples.length);
+}
+
+/* ────────────────────────────────────────────────────
+   Connected Component Labeling — Flood Fill 기반
+   인접한 1픽셀들을 묶어 개별 객체로 분리
+   ──────────────────────────────────────────────────── */
+function findConnectedComponents(mask, w, h){
+  var visited = new Uint8Array(w * h);
+  var components = [];
+  
+  for(var y = 0; y < h; y++){
+    for(var x = 0; x < w; x++){
+      var idx = y * w + x;
+      if(!mask[idx] || visited[idx]) continue;
+      
+      /* BFS로 연결된 모든 픽셀 모음 */
+      var queue = [[x, y]];
+      visited[idx] = 1;
+      var pixels = [];
+      var sumX = 0, sumY = 0;
+      var minX = x, minY = y, maxX = x, maxY = y;
+      
+      while(queue.length > 0){
+        var pt = queue.pop();
+        var px = pt[0], py = pt[1];
+        pixels.push([px, py]);
+        sumX += px; sumY += py;
+        if(px < minX) minX = px;
+        if(py < minY) minY = py;
+        if(px > maxX) maxX = px;
+        if(py > maxY) maxY = py;
+        
+        /* 4방향 이웃 */
+        var neighbors = [[px-1, py], [px+1, py], [px, py-1], [px, py+1]];
+        for(var n = 0; n < neighbors.length; n++){
+          var nx = neighbors[n][0], ny = neighbors[n][1];
+          if(nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+          var nidx = ny * w + nx;
+          if(mask[nidx] && !visited[nidx]){
+            visited[nidx] = 1;
+            queue.push([nx, ny]);
+          }
+        }
+      }
+      
+      components.push({
+        size: pixels.length,
+        cx: sumX / pixels.length,
+        cy: sumY / pixels.length,
+        minX: minX, minY: minY, maxX: maxX, maxY: maxY,
+        pixels: pixels
+      });
+    }
+  }
+  
+  /* 큰 순서대로 정렬 */
+  components.sort(function(a, b){ return b.size - a.size; });
+  return components;
 }
 
 /* 검출된 사과를 캔버스에 시각화 — redraw가 박스 모드 자동 처리 */
 function drawDetectedApples(photoObj){
   if(aIdx<0||photos[aIdx]!==photoObj) return;
-  redraw(); /* 박스 모드일 경우 redraw가 자동으로 빨간 원 그림 */
+  redraw();
 }
 
 /* 박스 모드 상태 UI 갱신 */
@@ -1554,25 +1854,31 @@ function setBoxStatus(status, count){
   
   var html = '';
   switch(status){
+    case 'analyzing':
+      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(74,159,212,.1);border-radius:6px;border-left:3px solid #4a9fd4">🤖 <b>AI 색 분석 중...</b> <span style="color:var(--muted);font-size:11px">난좌 흰색 기준점 찾는 중 (5~15초)</span></div>';
+      break;
+    case 'correcting':
+      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(140,196,74,.1);border-radius:6px;border-left:3px solid var(--accent)">✨ <b>색 보정 중...</b> <span style="color:var(--muted);font-size:11px">사진을 표준 조명으로 변환</span></div>';
+      break;
     case 'detecting':
-      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(74,159,212,.1);border-radius:6px;border-left:3px solid #4a9fd4">🤖 <b>AI 검출 중...</b> <span style="color:var(--muted);font-size:11px">사진을 분석하고 있어요. 10~30초 소요</span></div>';
+      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(231,193,7,.1);border-radius:6px;border-left:3px solid #ffc107">🔬 <b>픽셀 단위 사과 검출 중...</b> <span style="color:var(--muted);font-size:11px">난좌 내부 빨간 영역 분석</span></div>';
       break;
     case 'detected':
       html = '<div style="padding:10px;background:rgba(140,196,74,.1);border-radius:6px;border-left:3px solid var(--accent)">' +
-        '<div style="font-weight:600;color:var(--accent);margin-bottom:4px">✅ AI 검출 완료 — 사과 ' + count + '개</div>' +
-        '<div style="font-size:11px;color:var(--cream);line-height:1.6">캔버스의 <b style="color:#e74c3c">빨간 원</b>이 AI가 검출한 사과입니다. 다음 단계에서 검토/수정할 수 있습니다 (5-4 작업).</div>' +
+        '<div style="font-weight:600;color:var(--accent);margin-bottom:4px">✅ 검출 완료 — 사과 ' + count + '개</div>' +
+        '<div style="font-size:11px;color:var(--cream);line-height:1.6">📌 픽셀 단위로 정확히 검출됨. 캔버스의 <b style="color:#e74c3c">빨간 영역</b>이 검출된 사과입니다. 검토 후 색 보정 + 측정 시작.</div>' +
         '</div>';
       break;
     case 'keyMissing':
       html = '<div style="padding:10px;background:rgba(255,193,7,.1);border-radius:6px;border-left:3px solid #ffc107">' +
         '<div style="font-weight:600;color:#ffc107;margin-bottom:4px">🔑 API 키 필요</div>' +
-        '<div style="font-size:11px;color:var(--cream);line-height:1.6">우측 상단의 <b>🔑 AI</b> 버튼을 눌러 Claude API 키를 등록하세요. 키는 <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a>에서 발급받을 수 있습니다.</div>' +
+        '<div style="font-size:11px;color:var(--cream);line-height:1.6">우측 상단의 <b>🔑 AI</b> 버튼을 눌러 Claude API 키를 등록하세요.</div>' +
         '</div>';
       break;
     case 'error':
       html = '<div style="padding:10px;background:rgba(231,76,60,.1);border-radius:6px;border-left:3px solid #e74c3c">' +
-        '<div style="font-weight:600;color:#e74c3c;margin-bottom:4px">⚠ AI 검출 실패</div>' +
-        '<div style="font-size:11px;color:var(--cream);line-height:1.6">콘솔(F12)에서 오류 메시지를 확인하거나, 수동으로 사과를 마킹하세요.</div>' +
+        '<div style="font-weight:600;color:#e74c3c;margin-bottom:4px">⚠ 검출 실패</div>' +
+        '<div style="font-size:11px;color:var(--cream);line-height:1.6">콘솔(F12)에서 오류 메시지를 확인하세요. 사진을 다시 업로드하거나 다른 사진을 시도하세요.</div>' +
         '</div>';
       break;
     default:
@@ -1751,19 +2057,366 @@ function rerunBoxDetection(){
   detectApplesInBox(p, aIdx);
 }
 
-/* 색 보정 시작 (5-5에서 본격 구현) */
+/* ────────────────────────────────────────────────────
+   Phase 3: 측정 + 결과 (재설계 2026-05-15)
+   각 사과 영역의 LAB a* 측정 → 등급 → 평균 착색률
+   ──────────────────────────────────────────────────── */
 function startBoxColorCorrection(){
   if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return;
   var p = photos[aIdx];
   if(!p.detectedApples || p.detectedApples.length===0){
-    toast('검출된 사과가 없습니다. AI 검출 또는 수동 추가하세요.');
+    toast('검출된 사과가 없습니다');
     return;
   }
-  if(p.detectedApples.length < 5){
-    if(!confirm('사과가 '+p.detectedApples.length+'개만 검출되었습니다. 정확도가 낮을 수 있습니다. 계속하시겠습니까?')) return;
+  if(!p.analysisCanvas){
+    toast('분석 데이터가 없습니다. 다시 검출하세요');
+    return;
   }
-  toast('🎨 색 보정 단계는 다음 작업(5-5)에서 추가됩니다');
-  /* 5-5에서 여기에 화이트밸런스 보정 코드 추가 */
+  
+  toast('🔬 ' + p.detectedApples.length + '개 사과 측정 중...');
+  
+  /* 보정된 캔버스에서 픽셀 데이터 추출 */
+  var srcCanvas = p.correctedCanvas;
+  var sctx = srcCanvas.getContext('2d');
+  var fullImgData = sctx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+  var fullPixels = fullImgData.data;
+  
+  var aw = p.analysisCanvas.width;
+  var ah = p.analysisCanvas.height;
+  var scaleX = srcCanvas.width / aw;
+  var scaleY = srcCanvas.height / ah;
+  
+  /* 각 사과 측정 */
+  var results = [];
+  var totalPct = 0;
+  var gradeCounts = {G1:0,G2:0,G3:0,G4:0,G5:0};
+  
+  for(var i = 0; i < p.detectedApples.length; i++){
+    var apple = p.detectedApples[i];
+    
+    /* 사과 영역의 픽셀 RGB → LAB a* 평균 산출 */
+    var sumA = 0, sumL = 0, cnt = 0;
+    var pixels = apple.pixelMask; /* analysisCanvas 좌표 */
+    if(!pixels || pixels.length === 0) continue;
+    
+    /* 픽셀 샘플링 (성능을 위해 최대 300개) */
+    var step = Math.max(1, Math.floor(pixels.length / 300));
+    for(var j = 0; j < pixels.length; j += step){
+      var px = pixels[j][0], py = pixels[j][1];
+      /* 분석 좌표 → 원본 좌표 변환 */
+      var ox = Math.floor(px * scaleX);
+      var oy = Math.floor(py * scaleY);
+      var idx_p = (oy * srcCanvas.width + ox) * 4;
+      var r = fullPixels[idx_p];
+      var g = fullPixels[idx_p+1];
+      var b = fullPixels[idx_p+2];
+      var lab = rgbToLab(r, g, b);
+      sumA += lab.a;
+      sumL += lab.L;
+      cnt++;
+    }
+    
+    if(cnt === 0) continue;
+    
+    var avgA = sumA / cnt;
+    var avgL = sumL / cnt;
+    var pct = getPct(avgA);
+    var card = getCard(pct);
+    
+    results.push({
+      idx: i + 1,
+      x: apple.x, y: apple.y,
+      pct: pct,
+      a: Math.round(avgA*10)/10,
+      L: Math.round(avgL*10)/10,
+      grade: card.l,
+      gradeName: card.name,
+      gradeColor: card.color
+    });
+    
+    totalPct += pct;
+    if(gradeCounts[card.l] !== undefined) gradeCounts[card.l]++;
+  }
+  
+  if(results.length === 0){
+    toast('⚠ 측정 실패');
+    return;
+  }
+  
+  var avgPct = Math.round(totalPct / results.length * 10) / 10;
+  var avgCard = getCard(avgPct);
+  
+  /* 결과 저장 */
+  p.boxResult = {
+    apples: results,
+    count: results.length,
+    avgPct: avgPct,
+    avgGrade: avgCard.l,
+    avgGradeName: avgCard.name,
+    gradeCounts: gradeCounts,
+    nradStage: getNradStage(avgPct, currentVariety),
+    variety: currentVariety,
+    varietyName: VARIETY[currentVariety].name
+  };
+  
+  /* 결과 화면 표시 */
+  showBoxResult(p);
+  toast('✅ 측정 완료: 평균 ' + avgPct + '% (' + avgCard.l + ')');
+}
+
+/* RGB → LAB 변환 (CIE Lab) */
+function rgbToLab(r, g, b){
+  /* sRGB → XYZ */
+  r /= 255; g /= 255; b /= 255;
+  r = r > 0.04045 ? Math.pow((r + 0.055)/1.055, 2.4) : r/12.92;
+  g = g > 0.04045 ? Math.pow((g + 0.055)/1.055, 2.4) : g/12.92;
+  b = b > 0.04045 ? Math.pow((b + 0.055)/1.055, 2.4) : b/12.92;
+  var X = (r*0.4124 + g*0.3576 + b*0.1805) * 100;
+  var Y = (r*0.2126 + g*0.7152 + b*0.0722) * 100;
+  var Z = (r*0.0193 + g*0.1192 + b*0.9505) * 100;
+  /* XYZ → LAB */
+  X /= 95.047; Y /= 100.000; Z /= 108.883;
+  X = X > 0.008856 ? Math.pow(X, 1/3) : (7.787 * X) + 16/116;
+  Y = Y > 0.008856 ? Math.pow(Y, 1/3) : (7.787 * Y) + 16/116;
+  Z = Z > 0.008856 ? Math.pow(Z, 1/3) : (7.787 * Z) + 16/116;
+  return {
+    L: (116 * Y) - 16,
+    a: 500 * (X - Y),
+    b: 200 * (Y - Z)
+  };
+}
+
+/* Phase 3: 박스 결과 표시 + 라벨링 사진 생성 */
+function showBoxResult(photoObj){
+  var r = photoObj.boxResult;
+  if(!r) return;
+  
+  /* 캔버스에 등급별 색깔로 사과 마스크 + 등급 라벨 표시 */
+  redrawBoxResult(photoObj);
+  
+  /* 결과 패널 표시 */
+  var panel = document.getElementById('resultPanel');
+  var empty = document.getElementById('emptyState');
+  if(panel){
+    panel.style.display = 'block';
+    if(empty) empty.style.display = 'none';
+    
+    /* 박스 결과 전용 HTML 구성 */
+    var html = '<div style="margin-bottom:14px">' +
+      '<h3 style="font-size:14px;color:var(--accent);margin-bottom:8px">📦 박스 측정 결과</h3>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">' +
+        '<div style="background:rgba(0,0,0,.25);padding:12px;border-radius:6px;text-align:center">' +
+          '<div style="font-size:28px;font-weight:700;color:'+getCard(r.avgPct).color+'">'+r.avgPct+'%</div>' +
+          '<div style="font-size:10px;color:var(--muted);margin-top:4px">평균 착색률 ('+r.avgGrade+' '+r.avgGradeName+')</div>' +
+        '</div>' +
+        '<div style="background:rgba(0,0,0,.25);padding:12px;border-radius:6px;text-align:center">' +
+          '<div style="font-size:28px;font-weight:700;color:var(--accent)">'+r.count+'<span style="font-size:14px;opacity:.6">개</span></div>' +
+          '<div style="font-size:10px;color:var(--muted);margin-top:4px">측정된 사과 ('+r.varietyName+')</div>' +
+        '</div>' +
+      '</div>';
+    
+    /* 등급 분포 */
+    var maxG = Math.max(r.gradeCounts.G1, r.gradeCounts.G2, r.gradeCounts.G3, r.gradeCounts.G4, r.gradeCounts.G5, 1);
+    var gradeColors = {G1:'#b25358',G2:'#b26661',G3:'#af7969',G4:'#a68c70',G5:'#9d9d77'};
+    html += '<div style="background:rgba(0,0,0,.18);padding:10px;border-radius:6px;margin-bottom:10px">' +
+      '<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">📊 등급 분포</div>';
+    for(var gi=1; gi<=5; gi++){
+      var gk='G'+gi;
+      var cnt=r.gradeCounts[gk];
+      var w=Math.round(cnt/maxG*100);
+      html += '<div style="display:flex;align-items:center;gap:6px;margin:3px 0">' +
+        '<span style="font-size:10px;color:var(--muted);width:22px">'+gk+'</span>' +
+        '<div style="flex:1;height:14px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden">' +
+        '<div style="width:'+w+'%;height:100%;background:'+gradeColors[gk]+';transition:width .4s"></div>' +
+        '</div>' +
+        '<span style="font-size:11px;width:30px;text-align:right;color:var(--cream)">'+cnt+'개</span>' +
+        '</div>';
+    }
+    html += '</div>';
+    
+    /* 농진청 단계 */
+    if(r.nradStage){
+      html += '<div style="background:linear-gradient(135deg,rgba(140,196,74,.1),rgba(140,196,74,.04));border:1px solid rgba(140,196,74,.3);border-radius:6px;padding:10px;margin-bottom:10px">' +
+        '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">🌾 농촌진흥청 색체계</div>' +
+        '<div style="font-size:14px;font-weight:700;color:var(--cream);margin-bottom:4px">'+r.nradStage.stage+'</div>' +
+        '<div style="font-size:11px;color:var(--muted)">💡 '+r.nradStage.advice+'</div>' +
+        '</div>';
+    }
+    
+    html += '<div class="footnote">측정 방식: AI 색 보정 + 픽셀 단위 검출. 난좌 흰색 기준 화이트밸런스 적용. ' + r.count + '개 사과 LAB a* 평균.</div>';
+    
+    html += '<div class="share-bar" style="margin-top:10px">' +
+      '<button class="s-btn save" onclick="saveBoxResult()" style="background:var(--accent);color:var(--bg);font-weight:600">💾 결과 저장</button>' +
+      '<button class="s-btn save" onclick="saveBoxImg()">📥 이미지 저장</button>' +
+      '</div></div>';
+    
+    panel.innerHTML = html;
+  }
+}
+
+/* 박스 결과를 캔버스에 등급별로 표시 */
+function redrawBoxResult(photoObj){
+  if(aIdx<0 || photos[aIdx] !== photoObj) return;
+  var r = photoObj.boxResult;
+  if(!r) return;
+  
+  var w = cvs.width, h = cvs.height;
+  /* 원본 이미지 다시 그리기 */
+  ctx.drawImage(photoObj.img, 0, 0, w, h);
+  
+  /* 사과 마스크 등급별 색상으로 오버레이 */
+  if(photoObj.analysisCanvas && photoObj.analysisCanvas.appleMask){
+    var aw = photoObj.analysisCanvas.width;
+    var ah = photoObj.analysisCanvas.height;
+    var overlay = ctx.getImageData(0, 0, w, h);
+    var oData = overlay.data;
+    var scaleX = w / aw;
+    var scaleY = h / ah;
+    
+    /* 각 사과별로 영역 칠하기 */
+    for(var i = 0; i < photoObj.detectedApples.length; i++){
+      var apple = photoObj.detectedApples[i];
+      var result = r.apples[i];
+      if(!result || !apple.pixelMask) continue;
+      
+      /* 등급 색을 RGB로 파싱 */
+      var hex = result.gradeColor;
+      var gR = parseInt(hex.substr(1,2), 16);
+      var gG = parseInt(hex.substr(3,2), 16);
+      var gB = parseInt(hex.substr(5,2), 16);
+      
+      /* 픽셀들에 대해 캔버스 좌표로 변환 후 오버레이 */
+      for(var j = 0; j < apple.pixelMask.length; j++){
+        var px = apple.pixelMask[j][0];
+        var py = apple.pixelMask[j][1];
+        /* 작은 사각형 영역 칠하기 (속도) */
+        var ox1 = Math.floor(px * scaleX);
+        var oy1 = Math.floor(py * scaleY);
+        var ox2 = Math.ceil((px+1) * scaleX);
+        var oy2 = Math.ceil((py+1) * scaleY);
+        for(var oy = oy1; oy < oy2 && oy < h; oy++){
+          for(var ox = ox1; ox < ox2 && ox < w; ox++){
+            var idx_o = (oy * w + ox) * 4;
+            /* 등급 색 + 원본 50:50 */
+            oData[idx_o]     = oData[idx_o] * 0.5 + gR * 0.5;
+            oData[idx_o + 1] = oData[idx_o + 1] * 0.5 + gG * 0.5;
+            oData[idx_o + 2] = oData[idx_o + 2] * 0.5 + gB * 0.5;
+          }
+        }
+      }
+    }
+    ctx.putImageData(overlay, 0, 0);
+  }
+  
+  /* 각 사과 라벨 (등급 + %) */
+  for(var i = 0; i < r.apples.length; i++){
+    var a = r.apples[i];
+    var cx = a.x * w, cy = a.y * h;
+    var label = a.grade + ' ' + a.pct + '%';
+    ctx.font = 'bold 11px Courier New,monospace';
+    var tw = ctx.measureText(label).width + 10;
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    roundRect(ctx, cx-tw/2, cy-9, tw, 18, 4);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, cx, cy);
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  
+  /* 박스 전체 평균 (큰 글씨 좌상단) */
+  ctx.fillStyle = 'rgba(0,0,0,0.85)';
+  var bigLabel = '평균 ' + r.avgPct + '% (' + r.avgGrade + ')';
+  ctx.font = 'bold 18px sans-serif';
+  var btw = ctx.measureText(bigLabel).width + 20;
+  roundRect(ctx, 10, 10, btw, 32, 6);
+  ctx.fill();
+  ctx.fillStyle = getCard(r.avgPct).color;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(bigLabel, 20, 26);
+}
+
+/* 박스 결과 저장 */
+function saveBoxResult(){
+  if(aIdx<0 || !photos[aIdx] || !photos[aIdx].boxResult){
+    toast('저장할 결과가 없습니다');
+    return;
+  }
+  var p = photos[aIdx];
+  var r = p.boxResult;
+  
+  var records = loadAllRecords();
+  var rname = '';
+  if(currentRegion){
+    var regionData = loadRegionData();
+    if(regionData[currentRegion]) rname = regionData[currentRegion].name;
+  }
+  
+  var record = {
+    id: Date.now(),
+    date: new Date().toISOString().slice(0,10),
+    harvestDate: document.getElementById('harvestDate').value||'',
+    pct: r.avgPct,
+    grade: r.avgGrade,
+    gradeName: r.avgGradeName,
+    gradeColor: getCard(r.avgPct).color,
+    region: currentRegion,
+    regionName: rname,
+    address: currentAddress||'',
+    cnt: r.count,
+    conf: 95, /* 픽셀 단위 측정이라 신뢰도 높음 */
+    sc: 95,
+    mode: 'box',
+    variety: r.variety,
+    varietyName: r.varietyName,
+    nradStage: r.nradStage ? r.nradStage.stage : null,
+    boxData: {
+      gradeCounts: r.gradeCounts,
+      individual: r.apples
+    },
+    weather: null
+  };
+  
+  records.push(record);
+  saveAllRecords(records);
+  
+  /* 도별 통계 갱신 */
+  if(currentRegion){
+    var regionData = loadRegionData();
+    if(!regionData[currentRegion]) regionData[currentRegion] = {name: rname, count:0, sum:0, avg:0};
+    regionData[currentRegion].count++;
+    regionData[currentRegion].sum += r.avgPct;
+    regionData[currentRegion].avg = Math.round(regionData[currentRegion].sum / regionData[currentRegion].count * 10) / 10;
+    saveRegionData(regionData);
+  }
+  
+  p.saved = true;
+  toast('💾 박스 측정 저장됨 ('+r.count+'개 사과, 평균 '+r.avgPct+'%)');
+  renderStatsMemo();
+  initKoreaMap();
+}
+
+/* 박스 결과 이미지 저장 */
+function saveBoxImg(){
+  if(aIdx<0 || !photos[aIdx] || !photos[aIdx].boxResult){
+    toast('저장할 결과가 없습니다');
+    return;
+  }
+  /* 현재 캔버스를 이미지로 다운로드 */
+  cvs.toBlob(function(blob){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'fujigrade-box-' + Date.now() + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('📥 이미지 저장 완료');
+  }, 'image/png');
 }
 
 /* 캔버스 이벤트 리스너 등록 (박스 모드용)
@@ -1975,32 +2628,58 @@ function redraw(){
   var p=photos[aIdx];
   ctx.drawImage(p.img,0,0,cvs.width,cvs.height);
   
-  /* 박스 모드: 검출된 사과 원 자동 표시 (5-4) */
+  /* 박스 모드: 검출된 사과 픽셀 마스크 자동 표시 (재설계 2026-05-15) */
   if(p.mode==='box' && p.detectedApples && p.detectedApples.length>0){
     var w=cvs.width, h=cvs.height;
+    
+    /* 분석 캔버스의 사과 마스크를 캔버스 크기에 맞춰 표시 */
+    if(p.analysisCanvas && p.analysisCanvas.appleMask){
+      var aw = p.analysisCanvas.width;
+      var ah = p.analysisCanvas.height;
+      var appleMask = p.analysisCanvas.appleMask;
+      
+      /* 픽셀 마스크 오버레이 — 사과 영역에 반투명 빨강 칠하기 */
+      var overlay = ctx.getImageData(0, 0, w, h);
+      var oData = overlay.data;
+      var scaleX = w / aw;
+      var scaleY = h / ah;
+      
+      for(var oy = 0; oy < h; oy++){
+        var ay = Math.floor(oy / scaleY);
+        if(ay >= ah) continue;
+        for(var ox = 0; ox < w; ox++){
+          var ax = Math.floor(ox / scaleX);
+          if(ax >= aw) continue;
+          if(appleMask[ay * aw + ax]){
+            /* 빨간 반투명 오버레이 (원본 색 보존 + 빨강 강조) */
+            var idx_o = (oy * w + ox) * 4;
+            oData[idx_o]     = Math.min(255, oData[idx_o] * 0.6 + 231 * 0.4);
+            oData[idx_o + 1] = oData[idx_o + 1] * 0.6 + 76 * 0.4;
+            oData[idx_o + 2] = oData[idx_o + 2] * 0.6 + 60 * 0.4;
+          }
+        }
+      }
+      ctx.putImageData(overlay, 0, 0);
+    }
+    
+    /* 각 사과의 중심에 번호 라벨 */
     for(var i=0; i<p.detectedApples.length; i++){
       var a=p.detectedApples[i];
       var cx=a.x*w, cy=a.y*h;
-      var r=a.r*Math.min(w,h);
-      ctx.beginPath();
-      ctx.arc(cx,cy,r,0,2*Math.PI);
-      ctx.strokeStyle='rgba(231,76,60,0.9)';
-      ctx.lineWidth=3;
-      ctx.stroke();
-      ctx.fillStyle='rgba(231,76,60,0.1)';
-      ctx.fill();
+      
       /* 번호 라벨 */
-      ctx.fillStyle='rgba(0,0,0,0.8)';
+      ctx.fillStyle='rgba(0,0,0,0.85)';
       var num=String(i+1);
-      ctx.font='bold 11px Courier New,monospace';
+      ctx.font='bold 12px Courier New,monospace';
       var tw=ctx.measureText(num).width+10;
-      roundRect(ctx,cx-tw/2,cy-r-22,tw,18,4);
+      roundRect(ctx, cx-tw/2, cy-9, tw, 18, 4);
       ctx.fill();
       ctx.fillStyle='#fff';
       ctx.textAlign='center';
       ctx.textBaseline='middle';
-      ctx.fillText(num,cx,cy-r-13);
+      ctx.fillText(num, cx, cy);
     }
+    
     ctx.textAlign='left';
     ctx.textBaseline='alphabetic';
     return; /* 박스 모드는 사과 마킹(polyD)을 안 함 */

@@ -1490,36 +1490,45 @@ function onBoxFile(files){
    ════════════════════════════════════════════════════ */
 
 /* Phase 1 시작점 — 박스 사진 업로드 후 자동 호출 */
+/* ════════════════════════════════════════════════════
+   박스 모드 처리 — SAM3 기반 (재설계 2026-05-15)
+   ════════════════════════════════════════════════════
+   기존 픽셀 알고리즘 대신 Meta SAM3 사용 (Replicate API)
+   
+   흐름:
+   1. AI 색 보정 (Claude Vision) — 난좌 흰색 기준 화이트밸런스
+   2. 보정된 사진을 SAM3에 전달 → "apple" 텍스트로 자동 분할
+   3. SAM3가 각 사과의 폴리곤 좌표 반환
+   4. 폴리곤을 캔버스에 그리기 + 사용자 검토
+   5. 각 폴리곤 내부 픽셀 LAB 측정 → 착색률
+   ════════════════════════════════════════════════════ */
+
+/* Phase 1 시작점 — 박스 사진 업로드 후 자동 호출 */
 function detectApplesInBox(photoObj, idx){
   var keyInfo = AIConfig.getActiveKey();
   if(!keyInfo.key){
-    toast('⚠ API 키가 없습니다. 우측 상단 🔑 AI 버튼으로 키를 등록하세요.');
+    toast('⚠ Claude API 키 없음. 우측 상단 🔑 AI 버튼으로 등록.');
     setBoxStatus('keyMissing');
     return;
   }
   
   setBoxStatus('analyzing');
   
-  /* AI에 색 보정 분석 요청 — 위치 검출이 아니라 색 보정만 */
-  var prompt = '이 사진은 사과 난좌(흰색 EPS 폼 트레이) 박스입니다. 색 보정을 위한 정보만 분석하세요.\n\n' +
-    '난좌의 흰색 영역 중 "가장 깨끗하고 밝은 부분(그림자 없음, 사과·얼룩 없음, 직사광선 없음)"을 찾아서 그 영역의 평균 RGB 값을 측정하세요.\n\n' +
+  /* AI에 색 보정 매개변수 분석 요청 */
+  var prompt = '이 사진은 사과 난좌(흰색 EPS 폼 트레이) 박스입니다. 색 보정용 정보만 분석하세요.\n\n' +
+    '난좌의 흰색 영역 중 "가장 깨끗하고 밝은 부분"의 평균 RGB를 측정하세요.\n\n' +
     'JSON으로만 응답:\n' +
-    '{"tray_white_rgb":{"r":240,"g":238,"b":235},"tray_visible":true,"shadow_warning":"그림자가 강합니다"|null,"color_temp":"중성"|"노란빛"|"푸른빛","apple_count_estimate":15}\n\n' +
-    '- tray_white_rgb: 가장 깨끗한 흰색 영역의 평균 RGB (0~255)\n' +
-    '- tray_visible: 흰색 난좌가 분명히 보이는지 (false면 보정 불가)\n' +
-    '- shadow_warning: 그림자가 강해서 측정 정확도가 떨어질 수 있으면 메시지, 아니면 null\n' +
-    '- color_temp: 사진의 전반적인 색온도\n' +
-    '- apple_count_estimate: 사과 대략적인 개수 (검증용, 정확하지 않아도 됨)\n\n' +
-    '다른 텍스트 없이 JSON만 응답하세요.';
+    '{"tray_white_rgb":{"r":240,"g":238,"b":235},"tray_visible":true,"shadow_warning":null}\n\n' +
+    '다른 텍스트 없이 JSON만.';
   
-  callAI(photoObj.compressedUrl, prompt, {maxTokens: 500, highAccuracy: false}).then(function(res){
+  callAI(photoObj.compressedUrl, prompt, {maxTokens: 300, highAccuracy: false}).then(function(res){
     if(!res.success){
       console.error('[Phase1] AI 호출 실패:', res.error);
       if(res.needsKey){
-        toast('⚠ API 키 필요');
+        toast('⚠ Claude API 키 필요');
         setBoxStatus('keyMissing');
       } else {
-        toast('⚠ AI 분석 실패: ' + res.error);
+        toast('⚠ AI 색 분석 실패: ' + res.error);
         setBoxStatus('error');
       }
       return;
@@ -1527,57 +1536,48 @@ function detectApplesInBox(photoObj, idx){
     
     var data = parseAIJson(res.text);
     if(!data || !data.tray_white_rgb){
-      console.error('[Phase1] JSON 파싱 실패. 응답:', res.text);
-      toast('⚠ AI 응답 파싱 실패');
-      setBoxStatus('error');
+      console.error('[Phase1] JSON 파싱 실패:', res.text);
+      /* 색 보정 실패해도 SAM3는 호출 가능 → 보정 건너뛰기 */
+      photoObj.aiAnalysis = {tray_white_rgb: null, tray_visible: false};
+      photoObj.trayAvgRGB = null;
+      toast('⚠ 색 보정 건너뛰고 SAM3 분할 시작');
+      setTimeout(function(){
+        callSAM3(photoObj, idx);
+      }, 400);
       return;
     }
     
-    if(!data.tray_visible){
-      toast('⚠ 흰색 난좌가 안 보입니다. 색 보정 불가.');
-      setBoxStatus('error');
-      return;
-    }
-    
-    /* AI 분석 결과 저장 */
     photoObj.aiAnalysis = data;
     photoObj.trayAvgRGB = data.tray_white_rgb;
     
     if(data.shadow_warning){
-      setTimeout(function(){
-        toast('⚠ ' + data.shadow_warning);
-      }, 1500);
+      setTimeout(function(){ toast('⚠ ' + data.shadow_warning); }, 1500);
     }
     
-    toast('🤖 AI 색 분석 완료. 사진 보정 시작...');
-    
-    /* Phase 1-2: 사진 보정 적용 (JavaScript) */
+    toast('🤖 색 분석 완료. 사진 보정 시작...');
     setTimeout(function(){
       applyWhiteBalance(photoObj, idx);
     }, 400);
   });
 }
 
-/* ────────────────────────────────────────────────────
-   Phase 1-2: 화이트밸런스 보정 (JavaScript)
-   AI가 알려준 흰색 RGB → (255,255,255)로 변환하는 계수 적용
-   ──────────────────────────────────────────────────── */
+/* Phase 1-2: 화이트밸런스 보정 */
 function applyWhiteBalance(photoObj, idx){
   setBoxStatus('correcting');
   
   var rgb = photoObj.trayAvgRGB;
   if(!rgb || !rgb.r || !rgb.g || !rgb.b){
-    toast('⚠ 보정 기준 RGB 없음');
-    setBoxStatus('error');
+    /* 보정 안 하고 원본 그대로 SAM3 호출 */
+    photoObj.correctedCanvas = null;
+    photoObj.correctedUrl = photoObj.compressedUrl;
+    setTimeout(function(){ callSAM3(photoObj, idx); }, 200);
     return;
   }
   
-  /* 보정 계수: 255 / 현재값 (단, 너무 크지 않게 클램핑) */
   var kR = Math.min(2.0, 255 / rgb.r);
   var kG = Math.min(2.0, 255 / rgb.g);
   var kB = Math.min(2.0, 255 / rgb.b);
   
-  /* 캔버스에 그려서 픽셀 단위로 보정 */
   var srcCanvas = document.createElement('canvas');
   srcCanvas.width = photoObj.img.naturalWidth;
   srcCanvas.height = photoObj.img.naturalHeight;
@@ -1588,458 +1588,220 @@ function applyWhiteBalance(photoObj, idx){
   var pixels = imgData.data;
   
   for(var i = 0; i < pixels.length; i += 4){
-    pixels[i]     = Math.min(255, pixels[i]     * kR); /* R */
-    pixels[i + 1] = Math.min(255, pixels[i + 1] * kG); /* G */
-    pixels[i + 2] = Math.min(255, pixels[i + 2] * kB); /* B */
-    /* Alpha (i+3)는 그대로 */
+    pixels[i]     = Math.min(255, pixels[i]     * kR);
+    pixels[i + 1] = Math.min(255, pixels[i + 1] * kG);
+    pixels[i + 2] = Math.min(255, pixels[i + 2] * kB);
   }
   
   sctx.putImageData(imgData, 0, 0);
   
-  /* 보정된 이미지를 photoObj에 저장 */
   photoObj.correctedCanvas = srcCanvas;
   photoObj.correctedUrl = srcCanvas.toDataURL('image/jpeg', 0.92);
   photoObj.wbCorrection = {kR: kR, kG: kG, kB: kB, source: rgb};
   photoObj.wbCorrected = true;
   
-  /* 보정된 이미지로 표시 이미지 교체 */
+  /* 보정된 이미지를 표시 이미지로 교체 */
   var newImg = new Image();
   newImg.onload = function(){
     photoObj.img = newImg;
     photoObj.url = photoObj.correctedUrl;
     redraw();
-    toast('✨ 색 보정 완료. 사과 검출 시작...');
-    
-    /* Phase 2 시작 */
+    toast('✨ 색 보정 완료. SAM3 분할 시작...');
     setTimeout(function(){
-      detectApplesByPixel(photoObj, idx);
+      callSAM3(photoObj, idx);
     }, 400);
   };
   newImg.src = photoObj.correctedUrl;
 }
 
 /* ────────────────────────────────────────────────────
-   Phase 2: 픽셀 기반 사과 검출 (개선 v2 - 2026-05-15)
-   
-   변경점:
-   1. 빨강만이 아니라 "난좌 아닌 영역" 전체 = 사과 (region growing)
-   2. 사과 분리: 거리 변환 + 지역 극값 기반
-   3. 형태 필터: 둥근 모양만 (난좌 반사/그림자 제외)
-   4. 사과 후보 검증: 크기/원형도 둘 다 검사
+   Phase 2: SAM3로 사과 분할 (Netlify Function 호출)
    ──────────────────────────────────────────────────── */
-function detectApplesByPixel(photoObj, idx){
-  setBoxStatus('detecting');
+function callSAM3(photoObj, idx){
+  setBoxStatus('sam3');
   
-  var srcCanvas = photoObj.correctedCanvas;
-  if(!srcCanvas){
-    toast('⚠ 보정된 이미지 없음');
-    setBoxStatus('error');
-    return;
-  }
+  /* 보정된 이미지 (또는 원본) base64로 전송 */
+  var imageData = photoObj.correctedUrl || photoObj.compressedUrl;
   
-  /* 분석 사이즈 (속도와 정확도 균형) */
-  var ANALYSIS_SIZE = 600;
-  var scale = Math.min(1, ANALYSIS_SIZE / Math.max(srcCanvas.width, srcCanvas.height));
-  var aw = Math.round(srcCanvas.width * scale);
-  var ah = Math.round(srcCanvas.height * scale);
-  
-  var aCanvas = document.createElement('canvas');
-  aCanvas.width = aw;
-  aCanvas.height = ah;
-  var actx = aCanvas.getContext('2d');
-  actx.drawImage(srcCanvas, 0, 0, aw, ah);
-  
-  var imgData = actx.getImageData(0, 0, aw, ah);
-  var pixels = imgData.data;
-  
-  /* ────────────────────────────────────────────
-     STEP 1: 흰색 난좌 마스크
-     [실측 검증 2026-05-15] 임계값 b>560, sat<40으로 조정
-     이전 b>620,sat<25는 너무 엄격해서 난좌 못 잡음
-     ──────────────────────────────────────────── */
-  var trayMask = new Uint8Array(aw * ah);
-  for(var y = 0; y < ah; y++){
-    for(var x = 0; x < aw; x++){
-      var idx_p = (y * aw + x) * 4;
-      var r = pixels[idx_p], g = pixels[idx_p+1], b = pixels[idx_p+2];
-      var bright = r + g + b;
-      var maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
-      var sat = maxC - minC;
-      if(bright > 560 && sat < 40){
-        trayMask[y * aw + x] = 1;
-      }
-    }
-  }
-  
-  /* 난좌 마스크 채우기 (5x5 morphological closing) */
-  var trayFilled = new Uint8Array(aw * ah);
-  for(var y = 2; y < ah - 2; y++){
-    for(var x = 2; x < aw - 2; x++){
-      var cnt = 0;
-      for(var dy = -2; dy <= 2; dy++){
-        for(var dx = -2; dx <= 2; dx++){
-          if(trayMask[(y+dy) * aw + (x+dx)]) cnt++;
-        }
-      }
-      if(cnt >= 10) trayFilled[y * aw + x] = 1;
-    }
-  }
-  
-  /* ────────────────────────────────────────────
-     STEP 2: 난좌 내부 영역 정의 (dilation)
-     난좌에서 약 30~40px 안쪽 → 사과가 있을 수 있는 영역
-     ──────────────────────────────────────────── */
-  var DILATE = Math.round(Math.min(aw, ah) * 0.05); /* 사진 크기의 5% */
-  var trayInside = new Uint8Array(aw * ah);
-  /* 빠른 dilation: integral image 방식 대신 sparse sampling */
-  for(var y = 0; y < ah; y++){
-    for(var x = 0; x < aw; x++){
-      if(trayFilled[y * aw + x]){
-        trayInside[y * aw + x] = 1;
-        continue;
-      }
-      var found = false;
-      var d2 = DILATE * DILATE;
-      for(var dy = -DILATE; dy <= DILATE && !found; dy += 3){
-        for(var dx = -DILATE; dx <= DILATE && !found; dx += 3){
-          if(dx*dx + dy*dy > d2) continue;
-          var ny = y + dy, nx = x + dx;
-          if(ny < 0 || ny >= ah || nx < 0 || nx >= aw) continue;
-          if(trayFilled[ny * aw + nx]) found = true;
-        }
-      }
-      if(found) trayInside[y * aw + x] = 1;
-    }
-  }
-  
-  /* ────────────────────────────────────────────
-     STEP 3: 사과 후보 마스크 — 난좌 내부의 "비흰색" 영역 전체
-     사용자 요청: "사과 전체 (빨강+노랑+꼭지+초록 모두)"
-     ──────────────────────────────────────────── */
-  var appleCandidate = new Uint8Array(aw * ah);
-  for(var y = 0; y < ah; y++){
-    for(var x = 0; x < aw; x++){
-      var p = y * aw + x;
-      if(!trayInside[p]) continue;  /* 난좌 영역 밖이면 무시 */
-      if(trayFilled[p]) continue;   /* 흰색 난좌 자체는 제외 */
-      
-      var idx_p = p * 4;
-      var r = pixels[idx_p], g = pixels[idx_p+1], b = pixels[idx_p+2];
-      var bright = r + g + b;
-      
-      /* 너무 어두운 영역(그림자) 제외 */
-      if(bright < 200) continue;
-      /* 너무 밝은 영역(반사) 제외 */
-      if(bright > 700) continue;
-      
-      /* 사과 후보: 어느 정도 색이 있고 너무 회색이 아닌 픽셀 */
-      var maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
-      var sat = maxC - minC;
-      
-      /* 사과는 따뜻한 색(R 또는 R+G가 우세) */
-      var warmth = r - b; /* R이 B보다 크면 따뜻한 색 */
-      
-      if(sat > 15 && warmth > -10){
-        /* 색이 있고 차갑지 않은 영역 = 사과 후보 */
-        appleCandidate[p] = 1;
-      }
-    }
-  }
-  
-  /* ────────────────────────────────────────────
-     STEP 4: Morphological 정리
-     - Opening: 작은 노이즈 제거
-     - Closing: 작은 구멍 메우기
-     ──────────────────────────────────────────── */
-  /* Erosion (3x3) → 작은 점 노이즈 제거 */
-  var eroded = new Uint8Array(aw * ah);
-  for(var y = 1; y < ah - 1; y++){
-    for(var x = 1; x < aw - 1; x++){
-      var allSet = true;
-      for(var dy = -1; dy <= 1 && allSet; dy++){
-        for(var dx = -1; dx <= 1 && allSet; dx++){
-          if(!appleCandidate[(y+dy) * aw + (x+dx)]) allSet = false;
-        }
-      }
-      if(allSet) eroded[y * aw + x] = 1;
-    }
-  }
-  
-  /* Dilation (5x5) → 사과 영역 약간 확장 + 구멍 메우기 */
-  var appleMask = new Uint8Array(aw * ah);
-  for(var y = 0; y < ah; y++){
-    for(var x = 0; x < aw; x++){
-      var found = false;
-      for(var dy = -2; dy <= 2 && !found; dy++){
-        for(var dx = -2; dx <= 2 && !found; dx++){
-          var ny = y + dy, nx = x + dx;
-          if(ny < 0 || ny >= ah || nx < 0 || nx >= aw) continue;
-          if(eroded[ny * aw + nx]) found = true;
-        }
-      }
-      if(found && trayInside[y * aw + x] && !trayFilled[y * aw + x]){
-        appleMask[y * aw + x] = 1;
-      }
-    }
-  }
-  
-  /* ────────────────────────────────────────────
-     STEP 5: 거리 변환 (Distance Transform)
-     ──────────────────────────────────────────── */
-  var distMap = computeDistanceTransform(appleMask, aw, ah);
-  
-  /* ────────────────────────────────────────────
-     STEP 6: 지역 극값 찾기
-     [실측 검증 2026-05-15] 매개변수 조정
-     - 사과 마스크의 거리 변환 최대값이 작음 (사과끼리 닿아 있어서)
-     - MIN_PEAK = R * 0.6 (이전 1.5 → 너무 큼)
-     - MIN_VAL = R * 0.4 (이전 0.5 → 너무 높음)
-     이 값으로 30개 정확 검출 확인됨
-     ──────────────────────────────────────────── */
-  var EXPECTED_RADIUS = Math.round(Math.min(aw, ah) * 0.06);
-  var MIN_PEAK_DIST = EXPECTED_RADIUS * 0.6;
-  var MIN_VAL = EXPECTED_RADIUS * 0.4;
-  var centers = findLocalMaxima(distMap, aw, ah, MIN_PEAK_DIST, MIN_VAL);
-  
-  /* ────────────────────────────────────────────
-     STEP 7: 각 픽셀을 가장 가까운 중심점에 할당 (Voronoi-like)
-     ──────────────────────────────────────────── */
-  var assignment = new Int16Array(aw * ah); /* -1 = 미할당 */
-  for(var i = 0; i < assignment.length; i++) assignment[i] = -1;
-  
-  for(var y = 0; y < ah; y++){
-    for(var x = 0; x < aw; x++){
-      var p = y * aw + x;
-      if(!appleMask[p]) continue;
-      /* 가장 가까운 중심 찾기 */
-      var bestIdx = -1, bestD2 = Infinity;
-      for(var c = 0; c < centers.length; c++){
-        var ctr = centers[c];
-        var dx = x - ctr.x, dy = y - ctr.y;
-        var d2 = dx * dx + dy * dy;
-        /* 사과 반지름의 1.5배 이내만 */
-        if(d2 < bestD2 && d2 < (EXPECTED_RADIUS * 2) * (EXPECTED_RADIUS * 2)){
-          bestD2 = d2;
-          bestIdx = c;
-        }
-      }
-      if(bestIdx >= 0) assignment[p] = bestIdx;
-    }
-  }
-  
-  /* ────────────────────────────────────────────
-     STEP 8: 사과별 픽셀 수집 + 형태 검증
-     ──────────────────────────────────────────── */
-  var apples_temp = [];
-  for(var c = 0; c < centers.length; c++){
-    apples_temp.push({cx:0, cy:0, pixels:[], minX:aw, minY:ah, maxX:0, maxY:0});
-  }
-  
-  for(var y = 0; y < ah; y++){
-    for(var x = 0; x < aw; x++){
-      var a_idx = assignment[y * aw + x];
-      if(a_idx < 0) continue;
-      var ap = apples_temp[a_idx];
-      ap.pixels.push([x, y]);
-      ap.cx += x; ap.cy += y;
-      if(x < ap.minX) ap.minX = x;
-      if(y < ap.minY) ap.minY = y;
-      if(x > ap.maxX) ap.maxX = x;
-      if(y > ap.maxY) ap.maxY = y;
-    }
-  }
-  
-  /* 사과별 검증 + 정렬
-     [실측 검증 2026-05-15] 형태 필터 완화
-     - 최소 크기: 0.15 (이전 0.3) — 가장자리 사과도 통과
-     - 최대 크기: 3.0 (이전 2.5) — 합쳐진 사과도 통과
-     - 너비/높이 비율: 0.3~3.0 (이전 0.5~2.0)
-     - 채움 비율: 0.3 (이전 0.45) */
-  var minSize = Math.PI * EXPECTED_RADIUS * EXPECTED_RADIUS * 0.15;
-  var maxSize = Math.PI * EXPECTED_RADIUS * EXPECTED_RADIUS * 3.0;
-  var validApples = [];
-  
-  for(var i = 0; i < apples_temp.length; i++){
-    var ap = apples_temp[i];
-    var sz = ap.pixels.length;
-    if(sz < minSize || sz > maxSize) continue;
-    
-    ap.cx /= sz; ap.cy /= sz;
-    
-    var w_ratio = (ap.maxX - ap.minX) / Math.max(1, ap.maxY - ap.minY);
-    if(w_ratio < 0.3 || w_ratio > 3.0) continue;
-    
-    var bbox_area = (ap.maxX - ap.minX) * (ap.maxY - ap.minY);
-    var fill = sz / Math.max(1, bbox_area);
-    if(fill < 0.3) continue;
-    
-    validApples.push({
-      x: ap.cx / aw,
-      y: ap.cy / ah,
-      r: Math.sqrt(sz / Math.PI) / Math.min(aw, ah),
-      size: sz,
-      bounds: {
-        x1: ap.minX / aw, y1: ap.minY / ah,
-        x2: ap.maxX / aw, y2: ap.maxY / ah
-      },
-      pixelMask: ap.pixels,
-      _centerX: ap.cx,
-      _centerY: ap.cy
-    });
-  }
-  
-  /* 위치순 정렬 (위 → 아래, 왼쪽 → 오른쪽) */
-  validApples.sort(function(a, b){
-    var rowDiff = Math.floor(a._centerY / (EXPECTED_RADIUS * 1.5)) - Math.floor(b._centerY / (EXPECTED_RADIUS * 1.5));
-    if(rowDiff !== 0) return rowDiff;
-    return a._centerX - b._centerX;
-  });
-  
-  /* 결과 저장 */
-  photoObj.detectedApples = validApples;
-  photoObj.analysisCanvas = {
-    width: aw, height: ah,
-    trayMask: trayFilled,
-    appleMask: appleMask,
-    trayInside: trayInside
-  };
-  
-  if(validApples.length === 0){
-    toast('⚠ 사과를 검출하지 못했습니다');
-    setBoxStatus('error');
-    return;
-  }
-  
-  redraw();
-  toast('✅ 검출 완료: 사과 ' + validApples.length + '개');
-  setBoxStatus('detected', validApples.length);
-}
-
-/* ────────────────────────────────────────────────────
-   거리 변환 (Distance Transform) — 2-pass 방식
-   각 픽셀이 마스크 가장자리에서 얼마나 떨어졌는지 계산
-   ──────────────────────────────────────────────────── */
-function computeDistanceTransform(mask, w, h){
-  var dist = new Int32Array(w * h);
-  var MAX = w + h;
-  /* 초기화: 마스크 1=무한대, 0=0 */
-  for(var i = 0; i < dist.length; i++) dist[i] = mask[i] ? MAX : 0;
-  
-  /* Forward pass */
-  for(var y = 0; y < h; y++){
-    for(var x = 0; x < w; x++){
-      if(!mask[y * w + x]) continue;
-      var d = dist[y * w + x];
-      if(y > 0) d = Math.min(d, dist[(y-1) * w + x] + 1);
-      if(x > 0) d = Math.min(d, dist[y * w + (x-1)] + 1);
-      if(y > 0 && x > 0) d = Math.min(d, dist[(y-1) * w + (x-1)] + 1);
-      if(y > 0 && x < w-1) d = Math.min(d, dist[(y-1) * w + (x+1)] + 1);
-      dist[y * w + x] = d;
-    }
-  }
-  /* Backward pass */
-  for(var y = h - 1; y >= 0; y--){
-    for(var x = w - 1; x >= 0; x--){
-      if(!mask[y * w + x]) continue;
-      var d = dist[y * w + x];
-      if(y < h-1) d = Math.min(d, dist[(y+1) * w + x] + 1);
-      if(x < w-1) d = Math.min(d, dist[y * w + (x+1)] + 1);
-      if(y < h-1 && x < w-1) d = Math.min(d, dist[(y+1) * w + (x+1)] + 1);
-      if(y < h-1 && x > 0) d = Math.min(d, dist[(y+1) * w + (x-1)] + 1);
-      dist[y * w + x] = d;
-    }
-  }
-  return dist;
-}
-
-/* 지역 최대값 찾기 (사과 중심점 후보)
-   [실측 검증 2026-05-15] 단순 greedy 방식으로 개선
-   - 거리 변환 값이 큰 픽셀부터 시작
-   - 최소 거리 이내에 다른 중심이 없으면 채택 */
-function findLocalMaxima(distMap, w, h, minDist, minValue){
-  var candidates = [];
-  for(var y = 0; y < h; y++){
-    for(var x = 0; x < w; x++){
-      var v = distMap[y * w + x];
-      if(v >= minValue) candidates.push({x:x, y:y, v:v});
-    }
-  }
-  candidates.sort(function(a, b){ return b.v - a.v; });
-  
-  var centers = [];
-  var minD2 = minDist * minDist;
-  for(var i = 0; i < candidates.length; i++){
-    var c = candidates[i];
-    var ok = true;
-    for(var j = 0; j < centers.length; j++){
-      var d_x = c.x - centers[j].x, d_y = c.y - centers[j].y;
-      if(d_x * d_x + d_y * d_y < minD2){
-        ok = false;
-        break;
-      }
-    }
-    if(ok) centers.push({x:c.x, y:c.y, v:c.v});
-  }
-  return centers;
-}
-
-/* ────────────────────────────────────────────────────
-   Connected Component Labeling — Flood Fill 기반
-   인접한 1픽셀들을 묶어 개별 객체로 분리
-   ──────────────────────────────────────────────────── */
-function findConnectedComponents(mask, w, h){
-  var visited = new Uint8Array(w * h);
-  var components = [];
-  
-  for(var y = 0; y < h; y++){
-    for(var x = 0; x < w; x++){
-      var idx = y * w + x;
-      if(!mask[idx] || visited[idx]) continue;
-      
-      /* BFS로 연결된 모든 픽셀 모음 */
-      var queue = [[x, y]];
-      visited[idx] = 1;
-      var pixels = [];
-      var sumX = 0, sumY = 0;
-      var minX = x, minY = y, maxX = x, maxY = y;
-      
-      while(queue.length > 0){
-        var pt = queue.pop();
-        var px = pt[0], py = pt[1];
-        pixels.push([px, py]);
-        sumX += px; sumY += py;
-        if(px < minX) minX = px;
-        if(py < minY) minY = py;
-        if(px > maxX) maxX = px;
-        if(py > maxY) maxY = py;
-        
-        /* 4방향 이웃 */
-        var neighbors = [[px-1, py], [px+1, py], [px, py-1], [px, py+1]];
-        for(var n = 0; n < neighbors.length; n++){
-          var nx = neighbors[n][0], ny = neighbors[n][1];
-          if(nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-          var nidx = ny * w + nx;
-          if(mask[nidx] && !visited[nidx]){
-            visited[nidx] = 1;
-            queue.push([nx, ny]);
-          }
-        }
-      }
-      
-      components.push({
-        size: pixels.length,
-        cx: sumX / pixels.length,
-        cy: sumY / pixels.length,
-        minX: minX, minY: minY, maxX: maxX, maxY: maxY,
-        pixels: pixels
+  fetch('/.netlify/functions/sam-yolo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      mode: 'sam3',
+      image: imageData,
+      prompt: 'apple'
+    })
+  })
+  .then(function(r){
+    if(!r.ok){
+      return r.json().then(function(err){
+        throw new Error(err.error || ('HTTP '+r.status));
       });
     }
+    return r.json();
+  })
+  .then(function(data){
+    if(!data.success || !data.output){
+      throw new Error(data.error || 'SAM3 응답 형식 오류');
+    }
+    
+    console.log('[SAM3] 응답:', data.output);
+    
+    /* SAM3 출력 처리:
+       output은 보통 다음 중 하나:
+       - 폴리곤 배열: [{points: [[x,y],...], score: 0.95}, ...]
+       - 마스크 URL 배열: ["https://...mask1.png", ...]
+       - 객체: {polygons: [...], scores: [...], masks: [...]}
+    */
+    var apples = parseSAM3Output(data.output, photoObj);
+    
+    if(!apples || apples.length === 0){
+      toast('⚠ SAM3가 사과를 찾지 못함. 사진을 다시 확인하세요.');
+      setBoxStatus('error');
+      return;
+    }
+    
+    photoObj.detectedApples = apples;
+    photoObj.sam3Output = data.output;
+    redraw();
+    toast('✅ SAM3 검출 완료: 사과 ' + apples.length + '개');
+    setBoxStatus('detected', apples.length);
+  })
+  .catch(function(e){
+    console.error('[SAM3] 오류:', e);
+    toast('⚠ SAM3 호출 실패: ' + e.message);
+    setBoxStatus('error');
+  });
+}
+
+/* SAM3 출력을 표준 사과 배열로 변환 */
+function parseSAM3Output(output, photoObj){
+  var apples = [];
+  var imgW = photoObj.img.naturalWidth || photoObj.img.width;
+  var imgH = photoObj.img.naturalHeight || photoObj.img.height;
+  
+  /* Case A: output이 배열 (폴리곤 또는 마스크 URL) */
+  if(Array.isArray(output)){
+    for(var i = 0; i < output.length; i++){
+      var item = output[i];
+      var apple = parseSAM3Item(item, imgW, imgH, i);
+      if(apple) apples.push(apple);
+    }
+  }
+  /* Case B: output이 객체 */
+  else if(typeof output === 'object'){
+    /* polygons 키 있으면 */
+    if(output.polygons && Array.isArray(output.polygons)){
+      for(var i = 0; i < output.polygons.length; i++){
+        var poly = output.polygons[i];
+        var score = output.scores ? output.scores[i] : 1.0;
+        var apple = parseSAM3Polygon(poly, score, imgW, imgH, i);
+        if(apple) apples.push(apple);
+      }
+    }
+    /* masks 키 있으면 (마스크 이미지 URL 배열) */
+    else if(output.masks && Array.isArray(output.masks)){
+      for(var i = 0; i < output.masks.length; i++){
+        apples.push({
+          x: 0.5, y: 0.5, r: 0.05,
+          maskUrl: output.masks[i],
+          polygon: null,
+          score: output.scores ? output.scores[i] : 1.0,
+          idx: i + 1
+        });
+      }
+    }
   }
   
-  /* 큰 순서대로 정렬 */
-  components.sort(function(a, b){ return b.size - a.size; });
-  return components;
+  return apples;
 }
+
+/* 단일 SAM3 아이템 처리 (배열 요소) */
+function parseSAM3Item(item, imgW, imgH, idx){
+  /* 문자열이면 마스크 이미지 URL */
+  if(typeof item === 'string'){
+    return {
+      x: 0.5, y: 0.5, r: 0.05,
+      maskUrl: item,
+      polygon: null,
+      score: 1.0,
+      idx: idx + 1
+    };
+  }
+  /* 객체면 폴리곤 또는 마스크 정보 */
+  if(typeof item === 'object'){
+    if(item.points || item.polygon){
+      var pts = item.points || item.polygon;
+      return parseSAM3Polygon(pts, item.score || item.confidence || 1.0, imgW, imgH, idx);
+    }
+    if(item.mask){
+      return {
+        x: 0.5, y: 0.5, r: 0.05,
+        maskUrl: item.mask,
+        polygon: null,
+        score: item.score || 1.0,
+        idx: idx + 1
+      };
+    }
+  }
+  return null;
+}
+
+/* 폴리곤 좌표 처리 */
+function parseSAM3Polygon(points, score, imgW, imgH, idx){
+  if(!points || points.length < 3) return null;
+  
+  /* 좌표 정규화 (0~1) — 픽셀 좌표라고 가정 */
+  var normPoints = [];
+  var sumX = 0, sumY = 0;
+  var minX = imgW, minY = imgH, maxX = 0, maxY = 0;
+  
+  for(var i = 0; i < points.length; i++){
+    var pt = points[i];
+    var x, y;
+    if(Array.isArray(pt)){
+      x = pt[0]; y = pt[1];
+    } else if(pt.x !== undefined){
+      x = pt.x; y = pt.y;
+    } else {
+      continue;
+    }
+    /* 0~1 범위면 그대로, 픽셀 좌표면 정규화 */
+    if(x > 1) x = x / imgW;
+    if(y > 1) y = y / imgH;
+    normPoints.push([x, y]);
+    sumX += x; sumY += y;
+    if(x < minX/imgW) minX = x * imgW;
+    if(y < minY/imgH) minY = y * imgH;
+    if(x > maxX/imgW) maxX = x * imgW;
+    if(y > maxY/imgH) maxY = y * imgH;
+  }
+  
+  if(normPoints.length < 3) return null;
+  
+  var cx = sumX / normPoints.length;
+  var cy = sumY / normPoints.length;
+  
+  /* 반지름 추정: 가장 멀리 있는 점까지 거리 */
+  var maxDist = 0;
+  for(var i = 0; i < normPoints.length; i++){
+    var dx = normPoints[i][0] - cx;
+    var dy = normPoints[i][1] - cy;
+    var d = Math.sqrt(dx*dx + dy*dy);
+    if(d > maxDist) maxDist = d;
+  }
+  
+  return {
+    x: cx,
+    y: cy,
+    r: maxDist,
+    polygon: normPoints,
+    maskUrl: null,
+    score: score,
+    idx: idx + 1
+  };
+}
+
 
 /* 검출된 사과를 캔버스에 시각화 — redraw가 박스 모드 자동 처리 */
 function drawDetectedApples(photoObj){
@@ -2060,8 +1822,11 @@ function setBoxStatus(status, count){
     case 'correcting':
       html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(140,196,74,.1);border-radius:6px;border-left:3px solid var(--accent)">✨ <b>색 보정 중...</b> <span style="color:var(--muted);font-size:11px">사진을 표준 조명으로 변환</span></div>';
       break;
+    case 'sam3':
+      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(170,100,255,.1);border-radius:6px;border-left:3px solid #aa64ff">🎯 <b>SAM3 사과 분할 중...</b> <span style="color:var(--muted);font-size:11px">픽셀 단위 외곽선 추출 (30~60초)</span></div>';
+      break;
     case 'detecting':
-      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(231,193,7,.1);border-radius:6px;border-left:3px solid #ffc107">🔬 <b>픽셀 단위 사과 검출 중...</b> <span style="color:var(--muted);font-size:11px">난좌 내부 빨간 영역 분석</span></div>';
+      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(231,193,7,.1);border-radius:6px;border-left:3px solid #ffc107">🔬 <b>분석 중...</b></div>';
       break;
     case 'detected':
       html = '<div style="padding:10px;background:rgba(140,196,74,.1);border-radius:6px;border-left:3px solid var(--accent)">' +
@@ -2268,93 +2033,110 @@ function startBoxColorCorrection(){
     toast('검출된 사과가 없습니다');
     return;
   }
-  if(!p.analysisCanvas){
-    toast('분석 데이터가 없습니다. 다시 검출하세요');
-    return;
-  }
   
   toast('🔬 ' + p.detectedApples.length + '개 사과 측정 중...');
   
-  /* 보정된 캔버스에서 픽셀 데이터 추출 */
-  var srcCanvas = p.correctedCanvas;
+  /* 측정용 캔버스 — 보정된 캔버스 또는 원본 */
+  var srcCanvas;
+  if(p.correctedCanvas){
+    srcCanvas = p.correctedCanvas;
+  } else {
+    /* 보정 안 됐으면 원본 이미지로 캔버스 만들기 */
+    srcCanvas = document.createElement('canvas');
+    srcCanvas.width = p.img.naturalWidth || p.img.width;
+    srcCanvas.height = p.img.naturalHeight || p.img.height;
+    var stmp = srcCanvas.getContext('2d');
+    stmp.drawImage(p.img, 0, 0);
+  }
   var sctx = srcCanvas.getContext('2d');
-  var fullImgData = sctx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+  var W = srcCanvas.width, H = srcCanvas.height;
+  var fullImgData = sctx.getImageData(0, 0, W, H);
   var fullPixels = fullImgData.data;
   
-  var aw = p.analysisCanvas.width;
-  var ah = p.analysisCanvas.height;
-  var scaleX = srcCanvas.width / aw;
-  var scaleY = srcCanvas.height / ah;
-  
-  /* 각 사과 측정 — 새 방식: 픽셀 색상 분류 기반 */
+  /* 각 사과 측정 — 폴리곤 내부 픽셀 색상 분류 */
   var results = [];
   var totalPct = 0;
   var gradeCounts = {G1:0,G2:0,G3:0,G4:0,G5:0};
   
   for(var i = 0; i < p.detectedApples.length; i++){
     var apple = p.detectedApples[i];
-    if(!apple.pixelMask || apple.pixelMask.length === 0) continue;
     
-    /* 픽셀들을 색상별로 분류 (농진청 방식)
-       - 빨강:  a* > 20  (G1-G2 영역)
-       - 분홍:  10 < a* ≤ 20  (G2-G3 영역)
-       - 노랑/주황:  0 < a* ≤ 10  (G3-G4 영역)
-       - 연황:  -5 < a* ≤ 0  (G4 영역)
-       - 초록/녹황:  a* ≤ -5  (G5 영역, 미숙)
-       
-       착색률 = (빨강 + 분홍) / 전체 * 100
-       이게 사용자께서 말씀하신 "표면의 빨강 비율" */
-    var pixels = apple.pixelMask;
+    /* 폴리곤이 있으면 그 안의 픽셀들만 */
+    var polygon = apple.polygon;
+    if(!polygon || polygon.length < 3){
+      /* 폴리곤 없으면 원형 영역으로 (백업) */
+      var cx_n = apple.x, cy_n = apple.y, r_n = apple.r || 0.05;
+      polygon = [];
+      for(var ang = 0; ang < 32; ang++){
+        var t = ang / 32 * 2 * Math.PI;
+        polygon.push([cx_n + r_n * Math.cos(t), cy_n + r_n * Math.sin(t)]);
+      }
+    }
+    
+    /* 폴리곤 bounding box (속도 최적화) */
+    var minX = 1, minY = 1, maxX = 0, maxY = 0;
+    for(var pi = 0; pi < polygon.length; pi++){
+      var px_n = polygon[pi][0], py_n = polygon[pi][1];
+      if(px_n < minX) minX = px_n;
+      if(py_n < minY) minY = py_n;
+      if(px_n > maxX) maxX = px_n;
+      if(py_n > maxY) maxY = py_n;
+    }
+    var bbox = {
+      x1: Math.max(0, Math.floor(minX * W)),
+      y1: Math.max(0, Math.floor(minY * H)),
+      x2: Math.min(W, Math.ceil(maxX * W)),
+      y2: Math.min(H, Math.ceil(maxY * H))
+    };
+    
+    /* 픽셀 샘플링 (큰 사과는 모두 측정하면 느림) */
+    var areaPixels = (bbox.x2 - bbox.x1) * (bbox.y2 - bbox.y1);
+    var step = Math.max(1, Math.floor(Math.sqrt(areaPixels / 1000)));
+    
     var totalCnt = 0;
-    var redCnt = 0;     /* a* > 20 */
-    var pinkCnt = 0;    /* 10 < a* ≤ 20 */
-    var orangeCnt = 0;  /* 0 < a* ≤ 10 */
-    var yellowCnt = 0;  /* -5 < a* ≤ 0 */
-    var greenCnt = 0;   /* a* ≤ -5 */
+    var redCnt = 0, pinkCnt = 0, orangeCnt = 0, yellowCnt = 0, greenCnt = 0;
     var sumA = 0, sumL = 0;
     
-    /* 꼭지/배꼽 부분(매우 어둡거나 매우 노란 작은 영역)은 제외할 수도 있지만
-       지금은 일단 모든 픽셀 포함하고 단순 비율 산출 */
-    var step = Math.max(1, Math.floor(pixels.length / 500));
-    for(var j = 0; j < pixels.length; j += step){
-      var px = pixels[j][0], py = pixels[j][1];
-      var ox = Math.floor(px * scaleX);
-      var oy = Math.floor(py * scaleY);
-      var idx_p = (oy * srcCanvas.width + ox) * 4;
-      var r = fullPixels[idx_p];
-      var g = fullPixels[idx_p+1];
-      var b = fullPixels[idx_p+2];
-      
-      /* 꼭지/하이라이트 제외 */
-      var bright = r + g + b;
-      if(bright < 200 || bright > 730) continue;
-      
-      var lab = rgbToLab(r, g, b);
-      sumA += lab.a;
-      sumL += lab.L;
-      totalCnt++;
-      
-      /* a* 기준 색상 분류 */
-      if(lab.a > 20) redCnt++;
-      else if(lab.a > 10) pinkCnt++;
-      else if(lab.a > 0) orangeCnt++;
-      else if(lab.a > -5) yellowCnt++;
-      else greenCnt++;
+    /* 폴리곤 픽셀 좌표 (W,H 기준) */
+    var polyPx = [];
+    for(var pi = 0; pi < polygon.length; pi++){
+      polyPx.push([polygon[pi][0] * W, polygon[pi][1] * H]);
+    }
+    
+    for(var y = bbox.y1; y < bbox.y2; y += step){
+      for(var x = bbox.x1; x < bbox.x2; x += step){
+        if(!pointInPolygon(x, y, polyPx)) continue;
+        
+        var idx_p = (y * W + x) * 4;
+        var r = fullPixels[idx_p];
+        var g = fullPixels[idx_p+1];
+        var b = fullPixels[idx_p+2];
+        
+        var bright = r + g + b;
+        if(bright < 200 || bright > 730) continue; /* 꼭지/하이라이트 제외 */
+        
+        var lab = rgbToLab(r, g, b);
+        sumA += lab.a;
+        sumL += lab.L;
+        totalCnt++;
+        
+        if(lab.a > 20) redCnt++;
+        else if(lab.a > 10) pinkCnt++;
+        else if(lab.a > 0) orangeCnt++;
+        else if(lab.a > -5) yellowCnt++;
+        else greenCnt++;
+      }
     }
     
     if(totalCnt === 0) continue;
     
-    /* 착색률 = 빨강 + 분홍의 픽셀 비율 (사용자 요청)
-       빨강(완전 착색) + 분홍(중간 착색)이 진정한 "착색" 영역 */
+    /* 착색률 = 빨강 + 분홍의 픽셀 비율 (농진청 표준) */
     var coloredCnt = redCnt + pinkCnt;
     var pct = Math.round(coloredCnt / totalCnt * 1000) / 10;
-    /* 추가: 주황까지 포함한 "느슨한 착색률"도 계산 가능 (참고용) */
     var pctLoose = Math.round((redCnt + pinkCnt + orangeCnt * 0.5) / totalCnt * 1000) / 10;
     
-    /* 너무 어두운 영역 가중치(과거 방식과의 비교) */
     var avgA = sumA / totalCnt;
     var avgL = sumL / totalCnt;
-    
     var card = getCard(pct);
     
     results.push({
@@ -2365,16 +2147,13 @@ function startBoxColorCorrection(){
       a: Math.round(avgA*10)/10,
       L: Math.round(avgL*10)/10,
       colorBreakdown: {
-        red: redCnt,
-        pink: pinkCnt,
-        orange: orangeCnt,
-        yellow: yellowCnt,
-        green: greenCnt,
-        total: totalCnt
+        red: redCnt, pink: pinkCnt, orange: orangeCnt,
+        yellow: yellowCnt, green: greenCnt, total: totalCnt
       },
       grade: card.l,
       gradeName: card.name,
-      gradeColor: card.color
+      gradeColor: card.color,
+      polygon: polygon
     });
     
     totalPct += pct;
@@ -2389,7 +2168,6 @@ function startBoxColorCorrection(){
   var avgPct = Math.round(totalPct / results.length * 10) / 10;
   var avgCard = getCard(avgPct);
   
-  /* 결과 저장 */
   p.boxResult = {
     apples: results,
     count: results.length,
@@ -2404,6 +2182,19 @@ function startBoxColorCorrection(){
   
   showBoxResult(p);
   toast('✅ 측정 완료: 평균 ' + avgPct + '% (' + avgCard.l + ')');
+}
+
+/* 점이 폴리곤 안에 있는지 판단 (Ray casting) */
+function pointInPolygon(x, y, polygon){
+  var inside = false;
+  for(var i = 0, j = polygon.length - 1; i < polygon.length; j = i++){
+    var xi = polygon[i][0], yi = polygon[i][1];
+    var xj = polygon[j][0], yj = polygon[j][1];
+    var intersect = ((yi > y) !== (yj > y)) &&
+      (x < (xj - xi) * (y - yi) / (yj - yi + 0.0001) + xi);
+    if(intersect) inside = !inside;
+  }
+  return inside;
 }
 
 /* RGB → LAB 변환 (CIE Lab) */
@@ -2904,46 +2695,44 @@ function redraw(){
   var p=photos[aIdx];
   ctx.drawImage(p.img,0,0,cvs.width,cvs.height);
   
-  /* 박스 모드: 검출된 사과 픽셀 마스크 자동 표시 (재설계 2026-05-15) */
+  /* 박스 모드: SAM3 폴리곤 표시 (재설계 2026-05-15) */
   if(p.mode==='box' && p.detectedApples && p.detectedApples.length>0){
     var w=cvs.width, h=cvs.height;
     
-    /* 분석 캔버스의 사과 마스크를 캔버스 크기에 맞춰 표시 */
-    if(p.analysisCanvas && p.analysisCanvas.appleMask){
-      var aw = p.analysisCanvas.width;
-      var ah = p.analysisCanvas.height;
-      var appleMask = p.analysisCanvas.appleMask;
-      
-      /* 픽셀 마스크 오버레이 — 사과 영역에 반투명 빨강 칠하기 */
-      var overlay = ctx.getImageData(0, 0, w, h);
-      var oData = overlay.data;
-      var scaleX = w / aw;
-      var scaleY = h / ah;
-      
-      for(var oy = 0; oy < h; oy++){
-        var ay = Math.floor(oy / scaleY);
-        if(ay >= ah) continue;
-        for(var ox = 0; ox < w; ox++){
-          var ax = Math.floor(ox / scaleX);
-          if(ax >= aw) continue;
-          if(appleMask[ay * aw + ax]){
-            /* 빨간 반투명 오버레이 (원본 색 보존 + 빨강 강조) */
-            var idx_o = (oy * w + ox) * 4;
-            oData[idx_o]     = Math.min(255, oData[idx_o] * 0.6 + 231 * 0.4);
-            oData[idx_o + 1] = oData[idx_o + 1] * 0.6 + 76 * 0.4;
-            oData[idx_o + 2] = oData[idx_o + 2] * 0.6 + 60 * 0.4;
-          }
+    /* 각 사과의 폴리곤을 반투명 빨강으로 칠하기 */
+    for(var i=0; i<p.detectedApples.length; i++){
+      var a=p.detectedApples[i];
+      if(a.polygon && a.polygon.length >= 3){
+        /* 폴리곤 외곽선 + 반투명 채우기 */
+        ctx.beginPath();
+        ctx.moveTo(a.polygon[0][0] * w, a.polygon[0][1] * h);
+        for(var pi=1; pi<a.polygon.length; pi++){
+          ctx.lineTo(a.polygon[pi][0] * w, a.polygon[pi][1] * h);
         }
+        ctx.closePath();
+        ctx.fillStyle='rgba(231, 76, 60, 0.35)';
+        ctx.fill();
+        ctx.strokeStyle='rgba(231, 76, 60, 0.95)';
+        ctx.lineWidth=2;
+        ctx.stroke();
+      } else {
+        /* 폴리곤 없으면 원으로 표시 (백업) */
+        var cx_ = a.x * w, cy_ = a.y * h;
+        var r_ = (a.r || 0.05) * Math.min(w, h);
+        ctx.beginPath();
+        ctx.arc(cx_, cy_, r_, 0, 2*Math.PI);
+        ctx.fillStyle='rgba(231, 76, 60, 0.25)';
+        ctx.fill();
+        ctx.strokeStyle='rgba(231, 76, 60, 0.9)';
+        ctx.lineWidth=2;
+        ctx.stroke();
       }
-      ctx.putImageData(overlay, 0, 0);
     }
     
-    /* 각 사과의 중심에 번호 라벨 */
+    /* 각 사과 번호 라벨 */
     for(var i=0; i<p.detectedApples.length; i++){
       var a=p.detectedApples[i];
       var cx=a.x*w, cy=a.y*h;
-      
-      /* 번호 라벨 */
       ctx.fillStyle='rgba(0,0,0,0.85)';
       var num=String(i+1);
       ctx.font='bold 12px Courier New,monospace';

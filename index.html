@@ -1796,6 +1796,10 @@ function parseSAM3Output(output, photoObj){
       var refH = output.orig_img_h || imgH;
       for(var i = 0; i < output.pred_polygons.length; i++){
         var poly = output.pred_polygons[i];
+        /* SAM3 실제 구조: pred_polygons[i] = [[x,y,x,y,...]] — 한 겹 더 감싸져 있음 */
+        if(Array.isArray(poly) && poly.length === 1 && Array.isArray(poly[0])){
+          poly = poly[0];
+        }
         var score = (output.pred_scores && output.pred_scores[i] != null) ? output.pred_scores[i] : 1.0;
         var apple = parseSAM3Polygon(poly, score, refW, refH, i);
         if(apple) apples.push(apple);

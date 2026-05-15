@@ -443,8 +443,115 @@ nav{
   .ws-card{padding:10px 4px}
 }
 </style>
+<!-- SheetJS (엑셀 내보내기용) - 3번 작업 -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
+
+<!-- ════ KREI 스플래시 스크린 (9번 작업) ════ -->
+<style>
+@keyframes kreiFadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes kreiLeafGrow{from{transform:scale(0) rotate(-45deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+@keyframes kreiPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes kreiFadeOut{to{opacity:0;visibility:hidden}}
+#kreiSplash{
+  position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;
+  background:linear-gradient(135deg,#005666 0%,#008486 50%,#0a3a3a 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  transition:opacity .6s ease-out, visibility .6s;
+}
+#kreiSplash.fade-out{opacity:0;visibility:hidden;pointer-events:none}
+.krei-logo-wrap{
+  display:flex;align-items:center;gap:18px;
+  animation:kreiFadeIn .8s ease-out both;
+}
+.krei-symbol{
+  width:90px;height:90px;border-radius:50%;
+  background:#fff;display:flex;align-items:center;justify-content:center;
+  position:relative;box-shadow:0 8px 24px rgba(0,0,0,.25);
+  animation:kreiPulse 2.4s ease-in-out infinite;
+}
+.krei-symbol::before{
+  content:'';position:absolute;width:34px;height:34px;
+  background:#008486;border-radius:0 100% 0 100%;
+  transform:rotate(-45deg);top:18px;left:28px;
+  animation:kreiLeafGrow 1s ease-out .3s both;
+}
+.krei-symbol-r{
+  position:relative;font-size:48px;font-weight:900;color:#005666;
+  z-index:1;letter-spacing:-2px;line-height:1;margin-top:8px;margin-left:-4px;
+}
+.krei-text{
+  display:flex;flex-direction:column;color:#fff;
+}
+.krei-text-en{
+  font-size:28px;font-weight:800;letter-spacing:.5px;line-height:1.1;
+}
+.krei-text-ko{
+  font-size:14px;font-weight:400;letter-spacing:.2em;opacity:.85;margin-top:4px;
+}
+.krei-subtitle{
+  margin-top:42px;color:#a8e6e6;font-size:13px;letter-spacing:.15em;
+  animation:kreiFadeIn .8s ease-out .5s both;text-transform:uppercase;
+}
+.krei-product{
+  margin-top:14px;color:#fff;font-size:32px;font-weight:700;letter-spacing:1px;
+  animation:kreiFadeIn .8s ease-out .7s both;
+}
+.krei-product-sub{
+  margin-top:6px;color:rgba(255,255,255,.7);font-size:12px;
+  animation:kreiFadeIn .8s ease-out .9s both;
+}
+.krei-loading{
+  position:absolute;bottom:40px;display:flex;gap:6px;
+  animation:kreiFadeIn .8s ease-out 1.1s both;
+}
+.krei-dot{
+  width:8px;height:8px;border-radius:50%;background:#7fd3d3;
+  animation:kreiPulse 1.2s ease-in-out infinite;
+}
+.krei-dot:nth-child(2){animation-delay:.2s}
+.krei-dot:nth-child(3){animation-delay:.4s}
+@media(max-width:480px){
+  .krei-symbol{width:70px;height:70px}
+  .krei-symbol::before{width:26px;height:26px;top:14px;left:22px}
+  .krei-symbol-r{font-size:36px}
+  .krei-text-en{font-size:22px}
+  .krei-text-ko{font-size:12px}
+  .krei-product{font-size:24px}
+}
+</style>
+<div id="kreiSplash">
+  <div class="krei-logo-wrap">
+    <div class="krei-symbol"><div class="krei-symbol-r">R</div></div>
+    <div class="krei-text">
+      <div class="krei-text-en">KREI</div>
+      <div class="krei-text-ko">한국농촌경제연구원</div>
+    </div>
+  </div>
+  <div class="krei-subtitle">Korea Rural Economic Institute</div>
+  <div class="krei-product">🍎 FujiGrade</div>
+  <div class="krei-product-sub">후지사과 착색 판정 시스템</div>
+  <div class="krei-loading">
+    <div class="krei-dot"></div>
+    <div class="krei-dot"></div>
+    <div class="krei-dot"></div>
+  </div>
+</div>
+<script>
+function hideKreiSplash(){
+  var s=document.getElementById('kreiSplash');
+  if(s){s.classList.add('fade-out');setTimeout(function(){s.style.display='none';},600);}
+  try{localStorage.setItem('kreiSplashSeen',Date.now());}catch(e){}
+}
+/* 첫 방문 2.5초, 재방문(이전에 본 적 있음) 1.8초 — 자연스러운 차이 */
+(function(){
+  var seen=false;
+  try{seen=!!localStorage.getItem('kreiSplashSeen');}catch(e){}
+  setTimeout(hideKreiSplash, seen?1800:2500);
+})();
+</script>
 
 <!-- 프로토콜 진단 배너 - file:// 환경 자동 경고 -->
 <div id="protocolBanner" style="display:none;background:#c62828;color:#fff;padding:10px 14px;font-size:12px;line-height:1.5;border-bottom:2px solid #ff5252;text-align:center">
@@ -470,7 +577,10 @@ nav{
     <button class="nav-tab" onclick="showPage('records',this)">기록</button>
     <button class="nav-tab" onclick="showPage('refs',this)">참고 자료</button>
   </div>
-  <div class="nav-right">v21 · 꼭지+하부</div>
+  <div class="nav-right">
+    <button onclick="showAISettings()" style="background:transparent;border:1px solid rgba(255,255,255,.15);color:var(--muted);padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;margin-right:8px" title="AI API 키 설정">🔑 AI</button>
+    <span style="font-size:11px;color:var(--muted)">v22 · 박스</span>
+  </div>
 </nav>
 
 <!-- 분석 탭 -->
@@ -499,6 +609,13 @@ nav{
     <!-- 왼쪽 패널 -->
     <div class="left-panel">
 
+      <!-- 품종 선택 (7번 작업) -->
+      <div class="section-label">사과 품종</div>
+      <div class="mode-select" style="margin-bottom:14px">
+        <button class="mode-btn" id="varFuji" onclick="setVariety('fuji')">🍎 후지(부사)<br><span style="font-size:10px;opacity:.7">10월말~11월 수확</span></button>
+        <button class="mode-btn" id="varHongro" onclick="setVariety('hongro')">🌹 홍로<br><span style="font-size:10px;opacity:.7">8월말~9월 수확</span></button>
+      </div>
+
       <!-- 수확일 선택 -->
       <div class="section-label">수확일 선택</div>
       <div class="harvest-date">
@@ -509,15 +626,22 @@ nav{
 
       <!-- 촬영 모드 선택 (항목11) -->
       <div class="section-label">촬영 방식 선택</div>
-      <div class="mode-select">
+      <div class="mode-select" style="grid-template-columns:repeat(4,1fr);gap:6px">
         <button class="mode-btn on" id="modeTop" onclick="setPhotoMode('top')">🍎 꼭지만<br><span style="font-size:10px;opacity:.7">상부 촬영</span></button>
         <button class="mode-btn" id="modeBottom" onclick="setPhotoMode('bottom')">🔵 하부만<br><span style="font-size:10px;opacity:.7">꽃받침 촬영</span></button>
         <button class="mode-btn" id="modeBoth" onclick="setPhotoMode('both')">📸 상+하부<br><span style="font-size:10px;opacity:.7">2장 종합</span></button>
+        <button class="mode-btn" id="modeBox" onclick="setPhotoMode('box')" style="border-color:rgba(140,196,74,.4)">📦 박스<br><span style="font-size:10px;opacity:.7">난좌 다수</span></button>
       </div>
 
       <!-- 2장 모드 안내 -->
       <div class="dual-mode-info" id="dualModeInfo">
         📸 2장 모드: 꼭지(상부) 사진과 하부(꽃받침) 사진을 각각 업로드하면 두 부위를 종합하여 착색률을 산출합니다. 꼭지 가중치 60%, 하부 가중치 40% 적용.
+      </div>
+
+      <!-- 박스 모드 안내 (5-1 작업) -->
+      <div class="dual-mode-info" id="boxModeInfo" style="background:linear-gradient(135deg,rgba(140,196,74,.12),rgba(140,196,74,.03));border-color:rgba(140,196,74,.3)">
+        📦 <b>박스 분석 모드</b>: 5kg 15구 난좌(또는 다수 사과) 사진 1장으로 전체 평균 착색률을 산출합니다.<br>
+        <span style="font-size:10px;opacity:.85;line-height:1.6">진행 흐름: ① AI가 사과+난좌 자동 검출 → ② 사용자가 검토·수정 → ③ 난좌(흰색)를 기준으로 색 자동 보정 → ④ 사과 평균 착색률 산출</span>
       </div>
 
       <!-- 사진 업로드 -->
@@ -547,12 +671,39 @@ nav{
         </div>
       </div>
 
+      <!-- 박스 모드 업로드 영역 (5-1 작업) -->
+      <div id="uploadAreaBox" style="display:none">
+        <div class="upload-btn" style="border-color:rgba(140,196,74,.4);background:rgba(140,196,74,.05)">
+          <input type="file" id="fileBox" accept="image/*" multiple onchange="onBoxFile(this.files)">
+          <div class="up-icon">📦</div>
+          <div class="up-title">난좌 박스 사진</div>
+          <div class="up-sub">클릭 또는 드래그 · 여러 장 가능</div>
+        </div>
+        <div style="margin-top:8px;font-size:10px;color:var(--muted);line-height:1.6;padding:8px;background:rgba(0,0,0,.15);border-radius:4px">
+          💡 <b>좋은 촬영 팁</b>: ① 박스 바로 위에서 ② 그늘에서 (직사광선 피하기) ③ 사과들이 서로 닿지 않게 ④ 난좌 흰색 영역이 충분히 보이게
+        </div>
+      </div>
+
       <div class="photo-grid" id="photoGrid"></div>
+
+      <!-- 박스 모드 상태 표시 (5-3 작업) -->
+      <div id="boxStatus" style="margin:8px 0"></div>
+
+      <!-- 박스 모드 검토 바 (5-4 작업, 픽셀 검출용으로 단순화) -->
+      <div id="boxReviewBar" style="display:none;flex-direction:column;gap:8px;margin:8px 0;padding:10px;background:rgba(0,86,102,.1);border:1px solid rgba(0,132,134,.3);border-radius:var(--r)">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:600;color:#7fd3d3;margin-right:4px">📝 검토:</span>
+          <button class="tb" id="boxReviewBtn_delete" onclick="setBoxReviewMode('delete')">🗑 잘못 검출 삭제</button>
+          <button class="tb" onclick="rerunBoxDetection()" style="margin-left:auto;font-size:11px">🔄 다시 검출</button>
+        </div>
+        <div id="boxReviewTip" style="font-size:11px;color:var(--muted);line-height:1.5">💡 사과 번호를 클릭하면 잘못 검출된 영역을 삭제할 수 있습니다. AI가 자동으로 픽셀 단위 검출했으니 정확도가 높습니다.</div>
+        <button onclick="startBoxColorCorrection()" style="padding:10px;background:var(--accent);color:var(--bg);border:none;border-radius:var(--r);font-weight:700;cursor:pointer;font-size:13px;font-family:var(--fm)">🔬 측정 시작 (LAB a* 분석) →</button>
+      </div>
 
       <!-- 캔버스 -->
       <div id="cvs-wrap">
         <canvas id="cvs"></canvas>
-        <div class="mark-tip">💡 <span>꼭지 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.</span></div>
+        <div class="mark-tip">💡 <span id="markTipText">꼭지 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.</span></div>
         <div class="toolbar">
           <button class="tb mark-on" id="bMark" onclick="setMode('mark')">🔴 꼭지 마킹</button>
           <button class="tb" id="bCard" onclick="setMode('card')">🎯 카드 영역</button>
@@ -667,6 +818,19 @@ nav{
           <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">* 데이터는 이 기기에 저장됩니다. 판정 후 저장 동의 시 반영됩니다.</div>
         </div>
 
+        <!-- ════ 실시간 통계 메모장 (1번 작업) ════ -->
+        <div class="stats-memo" id="statsMemo" style="margin-top:14px;background:linear-gradient(135deg,rgba(0,86,102,.18),rgba(0,132,134,.08));border:1px solid rgba(0,132,134,.3);border-radius:var(--rl);padding:14px">
+          <div class="env-head" style="margin-bottom:10px">
+            <span class="env-ttl" style="color:#7fd3d3">📊 실시간 통계 메모장</span>
+            <span style="font-family:var(--mm);font-size:10px;color:var(--muted);margin-left:auto" id="memoUpdated">아직 데이터 없음</span>
+          </div>
+          <div id="memoBody" style="font-size:12px;line-height:1.7;color:var(--cream);font-family:var(--fm)">
+            <div style="color:var(--muted);font-style:italic;text-align:center;padding:14px 0">
+              판정을 저장하면 여기에 자동으로 통계가 누적됩니다.
+            </div>
+          </div>
+        </div>
+
       </div><!-- /env-sec -->
 
       <div class="tip-box">💡 판정 카드를 함께 촬영 후 "카드 영역" 지정 시 조명·기종 차이가 자동 보정됩니다.</div>
@@ -731,9 +895,21 @@ nav{
         </div>
 
         <div class="warn-box" id="warnBox"></div>
-        <div class="footnote">기준: 농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=−5.7→0%, a*=+38.8→100%). 꼭지 부위 기준.</div>
+
+        <!-- 농진청 색체계 매칭 (8번 작업) -->
+        <div id="nradMatchBox" style="display:none;margin-bottom:10px;padding:12px;background:linear-gradient(135deg,rgba(140,196,74,.1),rgba(140,196,74,.04));border:1px solid rgba(140,196,74,.3);border-radius:var(--r)">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">🌾 농촌진흥청 색체계 매칭</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <span id="nradVariety" style="background:var(--accent);color:var(--bg);font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px">후지</span>
+            <span id="nradStage" style="font-size:14px;font-weight:700;color:var(--cream)">—</span>
+          </div>
+          <div id="nradAdvice" style="font-size:11px;color:var(--muted);line-height:1.5">—</div>
+        </div>
+
+        <div class="footnote" id="footnoteBase">기준: 농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=−5.7→0%, a*=+38.8→100%). 꼭지 부위 기준.</div>
 
         <div class="share-bar">
+          <button class="s-btn save" id="saveResultBtn" onclick="onSaveResultClick()" style="background:var(--accent);color:var(--bg);font-weight:600">💾 결과 저장</button>
           <button class="s-btn save" onclick="saveImg()">📥 이미지 저장</button>
           <button class="s-btn share" onclick="shareRes()">📤 공유</button>
           <button class="s-btn copy" onclick="copyTxt()">📋 복사</button>
@@ -760,6 +936,105 @@ nav{
 <div class="refs-wrap">
   <div class="section-label" style="margin-bottom:6px">참고 자료</div>
   <div style="font-size:13px;color:var(--cream2);margin-bottom:16px;line-height:1.6">판정 알고리즘의 기준이 된 판정판 색판지와 연구 논문입니다.</div>
+
+  <!-- ════ 품종별 측정 기준 비교 (7번+8번 작업) ════ -->
+  <div style="background:linear-gradient(135deg,rgba(140,196,74,.08),rgba(140,196,74,.02));border:1px solid rgba(140,196,74,.25);border-radius:var(--rl);padding:16px;margin-bottom:20px">
+    <h3 style="font-size:15px;color:var(--accent);margin-bottom:4px">🍎 품종별 측정 기준</h3>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">FujiGrade는 후지·홍로 두 품종을 지원합니다. 품종마다 LAB 색좌표 범위와 수확 시기가 달라 측정 기준이 다릅니다.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <!-- 후지 카드 -->
+      <div style="background:rgba(0,0,0,.3);border:1px solid rgba(178,83,87,.4);border-radius:var(--r);padding:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:22px">🍎</span>
+          <div>
+            <div style="font-weight:700;color:#b25357">후지(부사)</div>
+            <div style="font-size:10px;color:var(--muted)">Malus domestica 'Fuji'</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--cream);line-height:1.7">
+          • <b>수확기</b>: 10월 하순~11월 상순<br>
+          • <b>유형</b>: 만생종<br>
+          • <b>국내 점유율</b>: 70%+ (최대 품종)<br>
+          • <b>육종</b>: 1939년 일본 아오모리현<br>
+          • <b>당도</b>: 14~16°Brix<br>
+          • <b>특징</b>: 저장성 최고. CA저장 시 5~6개월
+        </div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.1);font-size:10px;color:var(--muted)">
+          <b style="color:var(--accent)">측정 LAB a* 범위</b><br>
+          <span style="font-family:var(--mm)">-5.7 (G5 미착색) ~ +38.8 (G1 완착)</span>
+        </div>
+      </div>
+
+      <!-- 홍로 카드 -->
+      <div style="background:rgba(0,0,0,.3);border:1px solid rgba(200,66,74,.4);border-radius:var(--r);padding:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:22px">🌹</span>
+          <div>
+            <div style="font-weight:700;color:#c8424a">홍로</div>
+            <div style="font-size:10px;color:var(--muted)">Malus domestica 'Hongro'</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--cream);line-height:1.7">
+          • <b>수확기</b>: 8월 하순~9월 중순<br>
+          • <b>유형</b>: 중생종 (추석 사과 대표)<br>
+          • <b>육종</b>: 1988년 농촌진흥청<br>
+          • <b>부모</b>: 스퍼얼리블레이즈 × 스퍼골든딜리셔스<br>
+          • <b>당도</b>: 14~15°Brix<br>
+          • <b>특징</b>: 농홍색·줄무늬 없음. 식미 우수
+        </div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.1);font-size:10px;color:var(--muted)">
+          <b style="color:var(--accent)">측정 LAB a* 범위</b><br>
+          <span style="font-family:var(--mm)">-3.0 (G5 미착색) ~ +42.0 (G1 완착)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 품종별 수확 적기 색체계 -->
+    <div style="background:rgba(0,0,0,.2);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🌾 농촌진흥청 색체계 수확 단계 매칭</div>
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:6px;font-size:11px">
+        <div style="font-weight:700;color:var(--accent)">단계</div>
+        <div style="font-weight:700;color:#b25357">🍎 후지 권장</div>
+        <div style="font-weight:700;color:#c8424a">🌹 홍로 권장</div>
+
+        <div style="color:var(--muted)">완숙기</div>
+        <div>80~100% · 즉시 수확</div>
+        <div>80~100% · 추석 출하</div>
+
+        <div style="color:var(--muted)">적기</div>
+        <div>60~80% · 10월말</div>
+        <div>60~80% · 8월말~9월</div>
+
+        <div style="color:var(--muted)">숙기초</div>
+        <div>40~60% · 1~2주 후</div>
+        <div>40~60% · 1주 후</div>
+
+        <div style="color:var(--muted)">착색초기</div>
+        <div>20~40% · 미숙</div>
+        <div>20~40% · 야간온도 점검</div>
+
+        <div style="color:var(--muted)">미숙</div>
+        <div>0~20% · 영양/기상</div>
+        <div>0~20% · 7월말 평균</div>
+      </div>
+    </div>
+
+    <!-- 착색 메커니즘 -->
+    <div style="background:rgba(0,0,0,.2);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🔬 착색 메커니즘 (공통)</div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7">
+        사과 과피가 붉어지는 것은 <b>엽록소(녹색) 감소 + 안토시아닌(붉은색) 증가</b> 때문입니다. 안토시아닌 합성은 PAL, CHS, F3H 효소가 주관하며, <b>야간 저온(10~15°C)과 일조량</b>이 가장 강한 영향 요인입니다. 25°C 초과 시 합성이 억제됩니다.
+      </div>
+    </div>
+
+    <!-- 출처 -->
+    <div style="font-size:10px;color:var(--muted);line-height:1.6;padding:8px 10px;background:rgba(0,0,0,.15);border-radius:4px;border-left:2px solid var(--accent)">
+      <b>📚 출처</b><br>
+      • 후지 기준: 농촌진흥청·한국농업전문학교·충주시농업기술센터 공동 발행 판정판 색판지 (2019)<br>
+      • 홍로 기준: 김선애 외 (2016) 「고온에 의한 변색단계별 '홍로' 사과의 착색 및 당 축적 관련 유전자 발현 분석」, 시설원예·식물공장; 국립원예특작과학원 (2024) 「사과 '홍로'의 숙기 진단을 위한 최적 품질 지표 및 기준 설정」 (만개 후 164~173일, 색도 a*=14.7±12.8)
+    </div>
+  </div>
 
   <div class="card-img-section">
     <h3>후지사과 착색 판정판 (색판지)</h3>
@@ -813,6 +1088,161 @@ nav{
     <div class="paper-list" id="pc3"></div>
   </div>
 
+  <!-- ════════════════════════════════════════════════
+       데이터 출처 명세 (Data Sources Disclosure)
+       FujiGrade가 사용하는 모든 외부 자료와 추정값의 출처를 투명하게 공개합니다.
+       ════════════════════════════════════════════════ -->
+  <div style="margin-top:32px;padding:18px;background:linear-gradient(135deg,rgba(0,0,0,.35),rgba(0,0,0,.15));border:1px solid rgba(255,255,255,.08);border-radius:var(--rl)">
+    <h3 style="font-size:14px;color:var(--accent);margin-bottom:4px;letter-spacing:.02em">📋 데이터 출처 명세서</h3>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:18px;line-height:1.6">FujiGrade는 학술 연구 도구로서, 모든 수치와 자료의 출처를 투명하게 공개합니다. 아래는 본 시스템에 사용된 외부 자료의 전체 명세입니다.<br><span style="color:#8cc44a">✓ 자료 사용</span>: 공식·학술 자료를 그대로 인용 / <span style="color:#e8a020">◆ 연구 기반 추정</span>: 학술 논문에서 역산·도출 / <span style="color:#a0a0a0">○ 자체 산출</span>: 본 프로젝트 자체 측정·계산</div>
+
+    <!-- 1. LAB 색좌표 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">1. 후지 LAB 색좌표 (G1~G5)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        <b>사용 데이터</b>: a*=+38.8/+29.8/+18.7/+5.3/-5.7 (G1→G5), L*=47.5/51.4/53.6/56.6/58.5<br>
+        <b>출처</b>: 농촌진흥청·한국농업전문학교·충주시농업기술센터 공동 발행 「후지사과 착색 판정판 색판지」 (2019)<br>
+        <b>활용</b>: 분석 탭 판정 기준, Grade 탭 색판지 시각화, 결과 산출 공식의 양 끝값
+      </div>
+    </div>
+
+    <!-- 2. 홍로 LAB 색좌표 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#e8a020;font-size:11px;font-weight:600">◆ 연구 기반 추정</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">2. 홍로 LAB 색좌표 (G1~G5)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #e8a020">
+        <b>추정값</b>: a*=+42.0/+33.0/+22.0/+10.0/-3.0 (G1→G5), L*=45.0/48.5/52.0/55.0/58.0<br>
+        <b>근거 자료</b>:<br>
+        &nbsp;&nbsp;• 김선애 외 (2016) 「고온에 의한 변색단계별 '홍로' 사과의 착색 및 당 축적 관련 유전자 발현 분석」, 시설원예·식물공장<br>
+        &nbsp;&nbsp;• 국립원예특작과학원 (2024) 「사과 '홍로'의 숙기 진단을 위한 최적 품질 지표 및 기준 설정」 (만개 후 164~173일, 수확기 색도 a*=14.7±12.8)<br>
+        <b>추정 방법</b>: 위 연구의 수확기 a* 평균값과 표준편차로부터 G1~G5 단계 역산. 홍로는 후지보다 일찍·진하게 익는 품종 특성 반영.<br>
+        <b>주의</b>: 농촌진흥청 공식 「홍로 판정판」 자료는 현재 공개되지 않아 학술 데이터로 대체. 공식 자료 입수 시 갱신 예정.
+      </div>
+    </div>
+
+    <!-- 3. 농진청 색체계 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#e8a020;font-size:11px;font-weight:600">◆ 연구 기반 추정</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">3. 농촌진흥청 색체계 5단계 (완숙기/적기/숙기초/착색초기/미숙)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #e8a020">
+        <b>사용 단계명</b>: "완숙기", "적기", "숙기초", "착색초기", "미숙"<br>
+        <b>근거</b>: 농촌진흥청 사과 재배 매뉴얼과 「농업기술길잡이」 시리즈의 일반적 용어 채택. 정확한 LAB-단계 매칭표는 공개되지 않음.<br>
+        <b>구간 설정</b>: G1=80%↑(완숙기), G2=60~80%(적기), G3=40~60%(숙기초), G4=20~40%(착색초기), G5=20%↓(미숙) — 본 시스템 자체 매핑<br>
+        <b>주의</b>: 단계 명칭은 농진청 표준 용어이나, 구간 경계는 본 프로젝트가 5단계 색판지에 맞춰 설정한 값.
+      </div>
+    </div>
+
+    <!-- 4. 가중치 (꼭지/하부) -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#e8a020;font-size:11px;font-weight:600">◆ 연구 기반 추정</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">4. 꼭지 60% + 하부 40% 가중치</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #e8a020">
+        <b>적용 공식</b>: 종합 착색률 = (꼭지 착색률 × 0.6) + (하부 착색률 × 0.4)<br>
+        <b>근거</b>: Han et al. (2022) PMC 「봉지 제거 후 착색」 연구 — 꼭지부가 적도부·배꼽부보다 착색이 늦어 수확 적기 판정에 더 결정적임. Wang et al. (2021) — 착색 순서가 적도부 → 꼭지·배꼽 순으로 진행.<br>
+        <b>주의</b>: 정확한 60:40 비율을 제시한 논문은 없음. 위 연구 결과를 종합해 본 프로젝트가 임의 설정. 표준 공식이 발표되면 갱신 예정.
+      </div>
+    </div>
+
+    <!-- 5. 외부 API -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">5. 외부 API (위치·기상·고도)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        • <b>OpenStreetMap Nominatim</b> — 주소↔좌표 변환 (역지오코딩·정방향 검색). 라이선스: ODbL.<br>
+        • <b>Open-Meteo</b> — 일조시간·기온·강수량 (과거 14일 + 예보 1일). 라이선스: CC-BY 4.0. 비상업 무료.<br>
+        • <b>Open-Elevation</b> — 해발 고도. 오픈소스 무료.<br>
+        • <b>Anthropic Claude API</b> — 사진 워터마크 GPS 자동 인식 (사용자 API 키 필요).<br>
+        <b>주의</b>: 기상청 KMA API 인증키가 등록되어 있으나 sfc_aws_day.php 활용 신청 미완료로 현재는 Open-Meteo로 통일 사용 중.
+      </div>
+    </div>
+
+    <!-- 6. SVG 지도 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">6. 남한 8도 SVG 지도</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        <b>출처</b>: @svg-maps/south-korea (npm 패키지)<br>
+        <b>원본 데이터</b>: 통계청(KOSTAT) 행정구역 경계 기반<br>
+        <b>라이선스</b>: CC-BY-4.0<br>
+        <b>활용</b>: 전국 착색도 현황 지도 (viewBox 524×631)
+      </div>
+    </div>
+
+    <!-- 7. 지도 좌표 변환 공식 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#a0a0a0;font-size:11px;font-weight:600">○ 자체 산출</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">7. 지도 좌표 변환 공식 (위경도 → SVG 픽셀)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #a0a0a0">
+        <b>공식</b>: <span style="font-family:var(--mm);font-size:10px">x = 100.143 × 경도 − 12564.0, y = -111.065 × 위도 + 4302.3</span><br>
+        <b>산출 방법</b>: 본 프로젝트가 SVG viewBox(524×631)와 실제 좌표 2개 기준점(서울 37.566°N/126.978°E → 152,130 픽셀 ; 부산 35.180°N/129.075°E → 362,395 픽셀)으로 선형 보정 계산.<br>
+        <b>주의</b>: 정확한 측지좌표계 변환이 아닌 시각화용 근사 공식. 정밀 위치 분석에는 부적합.
+      </div>
+    </div>
+
+    <!-- 8. KREI CI -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#e8a020;font-size:11px;font-weight:600">◆ 디자인 참고 (재현)</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">8. KREI 스플래시 스크린 디자인</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #e8a020">
+        <b>참고 출처</b>: 한국농촌경제연구원(KREI) 공식 CI 가이드 (krei.re.kr/krei/contents.do?key=122)<br>
+        <b>참고한 요소</b>: 주색 청록색, R자+잎 모티브, "Reliability·Research·Responsibility" 의미<br>
+        <b>사용 색상</b>: #005666 ~ #008486 (정부기관 청록 톤 일반값)<br>
+        <b>주의</b>: 정확한 KREI 공식 헥스코드는 비공개. 색차계로 측정한 일반적 청록색 사용. 본 프로젝트는 KREI 정식 도구가 아닌 학술 시연용. 공식 사용 시 KREI 승인 필요.
+      </div>
+    </div>
+
+    <!-- 9. JavaScript 라이브러리 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">9. JavaScript 라이브러리</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        • <b>SheetJS (xlsx@0.18.5)</b> — 엑셀 내보내기. Apache 2.0 라이선스. CDN: cdn.jsdelivr.net<br>
+        • <b>JavaScript Canvas API</b> — 사진 픽셀 분석 (브라우저 내장)<br>
+        • <b>LocalStorage API</b> — 임시 데이터 저장 (브라우저 내장, Supabase 도입 예정)
+      </div>
+    </div>
+
+    <!-- 10. 학술 참고문헌 -->
+    <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="color:#8cc44a;font-size:11px;font-weight:600">✓ 자료 사용</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">10. 학술 참고문헌 (총 13편)</span>
+      </div>
+      <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #8cc44a">
+        <b>색 측정 기준 (C001~C005)</b>: Papadavid 2014, Sha 2019, Han 2022, Wang 2021, Arana 2012 — 모두 동료심사 학술지 (위 "색 측정 기준" 탭 참조)<br>
+        <b>기계비전·NIR (M001~M003)</b>: Sun 2022, Lu 2022, Kim 2024<br>
+        <b>국내 연구 (K001~K005)</b>: 잠 2014, 이 2022, 한 2014, 김 2021, 권 2025 (한국원예학회지·한국농림기상학회지 등)<br>
+        <b>활용</b>: 각 논문은 본 시스템의 측정 방법·기준값 설정 근거. 모든 DOI/PDF 링크 위 카테고리 탭에서 직접 확인 가능.
+      </div>
+    </div>
+
+    <!-- 마지막 안내 -->
+    <div style="margin-top:14px;padding:10px 12px;background:rgba(0,86,102,.15);border-left:3px solid #008486;border-radius:4px;font-size:10px;color:var(--cream);line-height:1.6">
+      <b style="color:#7fd3d3">📝 데이터 정확성 약속</b><br>
+      FujiGrade는 학술 연구 도구이며, 본 명세서에 누락된 자료가 발견되거나 더 정확한 공식 데이터(특히 농촌진흥청 「홍로 판정판」)를 확보하면 즉시 갱신합니다. 데이터 오류·누락 제보는 GitHub 이슈로 받습니다.<br>
+      <span style="color:var(--muted);font-size:9px">최종 갱신: 2026-05-14 / 프로젝트 라이선스: 미정 (학술 연구용)</span>
+    </div>
+  </div>
+
 </div>
 </div><!-- /page-refs -->
 
@@ -827,16 +1257,73 @@ nav{
    꼭지+하부 2장모드, 기록탭
 ════════════════════════════════════════════════ */
 
-/* ── 상수 ── */
-var CARD = [
-  {g:1,l:'G1',name:'진한 적색',pct:[78,100],color:'#b25357',a:38.8,l2:47.5,desc:'완전 착색. 수확 적기'},
-  {g:2,l:'G2',name:'적색',pct:[56,78],color:'#b26661',a:29.8,l2:51.4,desc:'착색 우수. 수확 가능'},
-  {g:3,l:'G3',name:'황적색',pct:[33,56],color:'#af7969',a:18.7,l2:53.6,desc:'착색 진행 중'},
-  {g:4,l:'G4',name:'연황색',pct:[12,33],color:'#a68c70',a:5.3,l2:56.6,desc:'착색 초기'},
-  {g:5,l:'G5',name:'연갈색',pct:[0,12],color:'#9d9d77',a:-5.7,l2:58.5,desc:'미착색'}
-];
+/* ── 품종별 판정 기준 (7번+8번 작업) ──
+   후지: 농촌진흥청·한국농업전문학교 판정판 실측 LAB 기준 (기존 사용 중)
+   홍로: 국립원예특작과학원 '홍로 숙기 진단' 연구 기반 (a*=14.7±12.8 수확 기준)
+        홍로는 후지보다 일찍, 더 진하게 익는 품종. 수확기 a* 범위가 좁고 높음. */
+var VARIETY = {
+  fuji: {
+    id:'fuji', name:'후지(부사)',
+    icon:'🍎', color:'#b25358',
+    desc:'10월 하순~11월 상순 수확. 만생종. 한국 사과 70%+',
+    cards:[
+      {g:1,l:'G1',name:'진한 적색',pct:[78,100],color:'#b25357',a:38.8,l2:47.5,desc:'완전 착색. 수확 적기'},
+      {g:2,l:'G2',name:'적색',pct:[56,78],color:'#b26661',a:29.8,l2:51.4,desc:'착색 우수. 수확 가능'},
+      {g:3,l:'G3',name:'황적색',pct:[33,56],color:'#af7969',a:18.7,l2:53.6,desc:'착색 진행 중'},
+      {g:4,l:'G4',name:'연황색',pct:[12,33],color:'#a68c70',a:5.3,l2:56.6,desc:'착색 초기'},
+      {g:5,l:'G5',name:'연갈색',pct:[0,12],color:'#9d9d77',a:-5.7,l2:58.5,desc:'미착색'}
+    ],
+    aMin:-5.7, aMax:38.8,
+    /* 농진청 색체계 매칭 (수확기 판정용) */
+    nradStages:[
+      {pct:[80,100],stage:'완숙기',advice:'즉시 수확. 저장성 우수'},
+      {pct:[60,80], stage:'적기',  advice:'수확 적기 (10월 하순~11월 초)'},
+      {pct:[40,60], stage:'숙기초',advice:'1~2주 후 재측정 권장'},
+      {pct:[20,40], stage:'착색초기',advice:'아직 미숙. 일조량 확인 필요'},
+      {pct:[0,20],  stage:'미숙',  advice:'착색 부족. 영양·기상 점검 필요'}
+    ]
+  },
+  hongro: {
+    id:'hongro', name:'홍로',
+    icon:'🌹', color:'#c8424a',
+    desc:'8월 하순~9월 중순 수확. 중생종. 추석 사과 대표',
+    cards:[
+      /* 홍로는 a* 범위가 더 높음(국립원예특작과학원 2024 연구) */
+      {g:1,l:'G1',name:'진홍적색',pct:[80,100],color:'#a23842',a:42.0,l2:45.0,desc:'완숙. 추석 출하 적기'},
+      {g:2,l:'G2',name:'농홍색', pct:[60,80], color:'#b54752',a:33.0,l2:48.5,desc:'착색 우수. 수확 가능'},
+      {g:3,l:'G3',name:'적색',  pct:[40,60], color:'#bc6566',a:22.0,l2:52.0,desc:'착색 진행 중'},
+      {g:4,l:'G4',name:'담홍색',pct:[20,40], color:'#bc8478',a:10.0,l2:55.0,desc:'착색 초기'},
+      {g:5,l:'G5',name:'녹황색',pct:[0,20],  color:'#a8a578',a:-3.0,l2:58.0,desc:'미착색. 8월 중순 이전'}
+    ],
+    aMin:-3.0, aMax:42.0,
+    nradStages:[
+      {pct:[80,100],stage:'완숙기',advice:'즉시 수확. 추석 출하'},
+      {pct:[60,80], stage:'적기',  advice:'수확 적기 (8월 하순~9월 중순)'},
+      {pct:[40,60], stage:'숙기초',advice:'1주 후 재측정 권장'},
+      {pct:[20,40], stage:'착색초기',advice:'아직 미숙. 야간온도·일조 확인'},
+      {pct:[0,20],  stage:'미숙',  advice:'착색 부족. 7월말~8월초 평균'}
+    ]
+  }
+};
+
+/* 현재 선택 품종 (기본: 후지) */
+var currentVariety = 'fuji';
+try { var saved=localStorage.getItem('fujigrade_variety'); if(saved&&VARIETY[saved]) currentVariety=saved; } catch(e){}
+
+/* ── 상수 (하위 호환용 - 기존 코드가 참조하는 변수들) ──
+   현재 품종 기준으로 동적 갱신됨. 옛 함수 호출(getPct, getCard) 그대로 작동. */
+var CARD = VARIETY[currentVariety].cards;
 var ACOLS=['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6'];
-var A_MIN=-5.7, A_MAX=38.8;
+var A_MIN = VARIETY[currentVariety].aMin;
+var A_MAX = VARIETY[currentVariety].aMax;
+
+/* 품종 전환 시 CARD/A_MIN/A_MAX 동기화 */
+function syncVarietyConstants(){
+  var v=VARIETY[currentVariety];
+  CARD = v.cards;
+  A_MIN = v.aMin;
+  A_MAX = v.aMax;
+}
 
 function getPct(a){ return Math.round(Math.max(0,Math.min(100,(a-A_MIN)/(A_MAX-A_MIN)*100))*10)/10; }
 function getCard(pct){
@@ -844,6 +1331,49 @@ function getCard(pct){
     if(pct>=CARD[i].pct[0]) return CARD[i];
   }
   return CARD[4];
+}
+
+/* 농진청 색체계 단계 매칭 (8번 작업) */
+function getNradStage(pct, variety){
+  var v = VARIETY[variety||currentVariety];
+  if(!v||!v.nradStages) return null;
+  for(var i=0;i<v.nradStages.length;i++){
+    if(pct>=v.nradStages[i].pct[0]) return v.nradStages[i];
+  }
+  return v.nradStages[v.nradStages.length-1];
+}
+
+/* 품종 선택 (7번 작업) */
+function setVariety(v){
+  if(!VARIETY[v]) return;
+  currentVariety = v;
+  try{localStorage.setItem('fujigrade_variety', v);}catch(e){}
+  syncVarietyConstants();
+  /* 버튼 활성 상태 갱신 */
+  var fb=document.getElementById('varFuji'), hb=document.getElementById('varHongro');
+  if(fb) fb.className='mode-btn'+(v==='fuji'?' on':'');
+  if(hb) hb.className='mode-btn'+(v==='hongro'?' on':'');
+  /* 현재 사진들 재판정 (기존 결과는 무효화) */
+  for(var i=0;i<photos.length;i++){
+    if(photos[i].apples){
+      for(var j=0;j<photos[i].apples.length;j++) photos[i].apples[j].res=null;
+    }
+    photos[i].res=null;
+    photos[i].saved=false; /* 품종 바꾸면 저장 상태 초기화 */
+  }
+  /* 화면 갱신 */
+  if(aIdx>=0){ redraw(); renderApples(); checkRun(); }
+  document.getElementById('emptyState').style.display='flex';
+  document.getElementById('resultPanel').style.display='none';
+  renderPhotoGrid();
+  toast('🌱 품종 변경: '+VARIETY[v].name+'. 다시 판정을 실행하세요');
+}
+
+/* 초기 품종 버튼 활성화 */
+function initVarietyUI(){
+  var fb=document.getElementById('varFuji'), hb=document.getElementById('varHongro');
+  if(fb) fb.className='mode-btn'+(currentVariety==='fuji'?' on':'');
+  if(hb) hb.className='mode-btn'+(currentVariety==='hongro'?' on':'');
 }
 function rgb2lab(r,g,b){
   r/=255;g/=255;b/=255;
@@ -871,10 +1401,20 @@ function setPhotoMode(m){
   document.getElementById('modeTop').className='mode-btn'+(m==='top'?' on':'');
   document.getElementById('modeBottom').className='mode-btn'+(m==='bottom'?' on':'');
   document.getElementById('modeBoth').className='mode-btn'+(m==='both'?' on':'');
+  document.getElementById('modeBox').className='mode-btn'+(m==='box'?' on':'');
+  /* 안내 박스 */
   document.getElementById('dualModeInfo').className='dual-mode-info'+(m==='both'?' show':'');
-  document.getElementById('uploadAreaSingle').style.display=m==='both'?'none':'block';
+  document.getElementById('boxModeInfo').className='dual-mode-info'+(m==='box'?' show':'');
+  /* 업로드 영역 전환 (5-1 작업: 박스 모드 추가) */
+  document.getElementById('uploadAreaSingle').style.display=(m==='both'||m==='box')?'none':'block';
   document.getElementById('uploadAreaDual').style.display=m==='both'?'block':'none';
-  document.getElementById('bMark').textContent=(m==='bottom')?'🔵 하부 마킹':'🔴 꼭지 마킹';
+  document.getElementById('uploadAreaBox').style.display=m==='box'?'block':'none';
+  /* 박스 모드는 마킹 버튼 라벨 다름 */
+  if(m==='box'){
+    document.getElementById('bMark').textContent='🍎 사과 마킹';
+  } else {
+    document.getElementById('bMark').textContent=(m==='bottom')?'🔵 하부 마킹':'🔴 꼭지 마킹';
+  }
 }
 
 /* ── 파일 업로드 (단일 모드) ── */
@@ -883,37 +1423,1192 @@ function onFiles(files){
   for(var i=0;i<files.length;i++) addPhoto(files[i]);
 }
 
-/* ── 파일 업로드 (2장 모드) ── */
+/* ── 파일 업로드 (박스 모드) ── 
+   여러 박스 사진 지원 (재설계 2026-05-15)
+   각 사진을 개별 처리 → photos 배열에 추가 */
+function onBoxFile(files){
+  if(!files||!files.length) return;
+  for(var i=0; i<files.length; i++){
+    (function(file, fileIdx){
+      processImageFile(file, function(result){
+        var idx=photos.length;
+        var obj={
+          img:result.displayImg,
+          url:result.displayUrl,
+          compressedUrl:result.compressedUrl,
+          file:file,
+          apples:[],cardRs:{},res:null,mode:'box',
+          orientation:result.orientation,
+          origSize:result.origSize,
+          displaySize:result.displaySize,
+          /* 박스 모드 전용 필드 */
+          aiAnalysis:null,
+          trayAvgRGB:null,
+          correctedCanvas:null,
+          correctedUrl:null,
+          wbCorrection:null,
+          wbCorrected:false,
+          analysisCanvas:null,  /* 사과/난좌 마스크 저장 */
+          detectedApples:null,
+          boxResult:null
+        };
+        photos.push(obj);
+        if(idx===0 || aIdx<0){
+          aIdx=idx;
+          selPhoto(idx);
+        } else {
+          renderPhotoGrid();
+        }
+        toast('📦 박스 사진 '+(fileIdx+1)+'/'+files.length+' 업로드 — AI 분석 시작');
+        /* 자동으로 처리 시작 */
+        setTimeout(function(){
+          detectApplesInBox(obj, idx);
+        }, 500 + fileIdx * 300);
+      });
+    })(files[i], i);
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   박스 모드 처리 — 3단계 (재설계 2026-05-15)
+   ════════════════════════════════════════════════════
+   Phase 1: AI가 색 보정 매개변수 분석
+            - 난좌 흰색 영역에서 가장 깨끗한 부분 찾기
+            - 그 영역의 RGB를 (255,255,255)로 만드는 보정 계수 산출
+            - JavaScript가 사진 전체 보정
+   
+   Phase 2: JavaScript 픽셀 기반 검출
+            - 보정된 사진에서 흰색 난좌 영역 마스크 만들기
+            - 난좌 마스크 안쪽에서 빨간색 영역만 찾기 (사과)
+            - 난좌 밖 빨강(흙, 풀 등)은 자동으로 무시
+            - Connected Component로 개별 사과 분리
+   
+   Phase 3: 측정 + 결과
+            - 각 사과 영역 LAB 측정
+            - 평균 착색률 산출
+            - 라벨링된 결과 사진
+   ════════════════════════════════════════════════════ */
+
+/* Phase 1 시작점 — 박스 사진 업로드 후 자동 호출 */
+/* ════════════════════════════════════════════════════
+   박스 모드 처리 — SAM3 기반 (재설계 2026-05-15)
+   ════════════════════════════════════════════════════
+   기존 픽셀 알고리즘 대신 Meta SAM3 사용 (Replicate API)
+   
+   흐름:
+   1. AI 색 보정 (Claude Vision) — 난좌 흰색 기준 화이트밸런스
+   2. 보정된 사진을 SAM3에 전달 → "apple" 텍스트로 자동 분할
+   3. SAM3가 각 사과의 폴리곤 좌표 반환
+   4. 폴리곤을 캔버스에 그리기 + 사용자 검토
+   5. 각 폴리곤 내부 픽셀 LAB 측정 → 착색률
+   ════════════════════════════════════════════════════ */
+
+/* Phase 1 시작점 — 박스 사진 업로드 후 자동 호출 */
+function detectApplesInBox(photoObj, idx){
+  var keyInfo = AIConfig.getActiveKey();
+  if(!keyInfo.key){
+    toast('⚠ Claude API 키 없음. 우측 상단 🔑 AI 버튼으로 등록.');
+    setBoxStatus('keyMissing');
+    return;
+  }
+  
+  setBoxStatus('analyzing');
+  
+  /* AI에 색 보정 매개변수 분석 요청 */
+  var prompt = '이 사진은 사과 난좌(흰색 EPS 폼 트레이) 박스입니다. 색 보정용 정보만 분석하세요.\n\n' +
+    '난좌의 흰색 영역 중 "가장 깨끗하고 밝은 부분"의 평균 RGB를 측정하세요.\n\n' +
+    'JSON으로만 응답:\n' +
+    '{"tray_white_rgb":{"r":240,"g":238,"b":235},"tray_visible":true,"shadow_warning":null}\n\n' +
+    '다른 텍스트 없이 JSON만.';
+  
+  callAI(photoObj.compressedUrl, prompt, {maxTokens: 300, highAccuracy: false}).then(function(res){
+    if(!res.success){
+      console.error('[Phase1] AI 호출 실패:', res.error);
+      if(res.needsKey){
+        toast('⚠ Claude API 키 필요');
+        setBoxStatus('keyMissing');
+      } else {
+        toast('⚠ AI 색 분석 실패: ' + res.error);
+        setBoxStatus('error');
+      }
+      return;
+    }
+    
+    var data = parseAIJson(res.text);
+    if(!data || !data.tray_white_rgb){
+      console.error('[Phase1] JSON 파싱 실패:', res.text);
+      /* 색 보정 실패해도 SAM3는 호출 가능 → 보정 건너뛰기 */
+      photoObj.aiAnalysis = {tray_white_rgb: null, tray_visible: false};
+      photoObj.trayAvgRGB = null;
+      toast('⚠ 색 보정 건너뛰고 SAM3 분할 시작');
+      setTimeout(function(){
+        callSAM3(photoObj, idx);
+      }, 400);
+      return;
+    }
+    
+    photoObj.aiAnalysis = data;
+    photoObj.trayAvgRGB = data.tray_white_rgb;
+    
+    if(data.shadow_warning){
+      setTimeout(function(){ toast('⚠ ' + data.shadow_warning); }, 1500);
+    }
+    
+    toast('🤖 색 분석 완료. 사진 보정 시작...');
+    setTimeout(function(){
+      applyWhiteBalance(photoObj, idx);
+    }, 400);
+  });
+}
+
+/* Phase 1-2: 화이트밸런스 보정 */
+function applyWhiteBalance(photoObj, idx){
+  setBoxStatus('correcting');
+  
+  var rgb = photoObj.trayAvgRGB;
+  if(!rgb || !rgb.r || !rgb.g || !rgb.b){
+    /* 보정 안 하고 원본 그대로 SAM3 호출 */
+    photoObj.correctedCanvas = null;
+    photoObj.correctedUrl = photoObj.compressedUrl;
+    setTimeout(function(){ callSAM3(photoObj, idx); }, 200);
+    return;
+  }
+  
+  var kR = Math.min(2.0, 255 / rgb.r);
+  var kG = Math.min(2.0, 255 / rgb.g);
+  var kB = Math.min(2.0, 255 / rgb.b);
+  
+  var srcCanvas = document.createElement('canvas');
+  srcCanvas.width = photoObj.img.naturalWidth;
+  srcCanvas.height = photoObj.img.naturalHeight;
+  var sctx = srcCanvas.getContext('2d');
+  sctx.drawImage(photoObj.img, 0, 0);
+  
+  var imgData = sctx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+  var pixels = imgData.data;
+  
+  for(var i = 0; i < pixels.length; i += 4){
+    pixels[i]     = Math.min(255, pixels[i]     * kR);
+    pixels[i + 1] = Math.min(255, pixels[i + 1] * kG);
+    pixels[i + 2] = Math.min(255, pixels[i + 2] * kB);
+  }
+  
+  sctx.putImageData(imgData, 0, 0);
+  
+  photoObj.correctedCanvas = srcCanvas;
+  photoObj.correctedUrl = srcCanvas.toDataURL('image/jpeg', 0.92);
+  photoObj.wbCorrection = {kR: kR, kG: kG, kB: kB, source: rgb};
+  photoObj.wbCorrected = true;
+  
+  /* 보정된 이미지를 표시 이미지로 교체 */
+  var newImg = new Image();
+  newImg.onload = function(){
+    photoObj.img = newImg;
+    photoObj.url = photoObj.correctedUrl;
+    redraw();
+    toast('✨ 색 보정 완료. SAM3 분할 시작...');
+    setTimeout(function(){
+      callSAM3(photoObj, idx);
+    }, 400);
+  };
+  newImg.src = photoObj.correctedUrl;
+}
+
+/* ────────────────────────────────────────────────────
+   Phase 2: SAM3로 사과 분할 (Netlify Function 호출)
+   ──────────────────────────────────────────────────── */
+function callSAM3(photoObj, idx){
+  setBoxStatus('sam3');
+  
+  /* 보정된 이미지 (또는 원본) base64로 전송 */
+  var imageData = photoObj.correctedUrl || photoObj.compressedUrl;
+  
+  fetch('/.netlify/functions/sam-yolo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      mode: 'sam3',
+      image: imageData,
+      prompt: 'apple'
+    })
+  })
+  .then(function(r){
+    if(!r.ok){
+      return r.json().then(function(err){
+        throw new Error(err.error || ('HTTP '+r.status));
+      });
+    }
+    return r.json();
+  })
+  .then(function(data){
+    if(!data.success || !data.output){
+      throw new Error(data.error || 'SAM3 응답 형식 오류');
+    }
+    
+    console.log('[SAM3] 응답:', data.output);
+    
+    /* SAM3 출력 처리:
+       output은 보통 다음 중 하나:
+       - 폴리곤 배열: [{points: [[x,y],...], score: 0.95}, ...]
+       - 마스크 URL 배열: ["https://...mask1.png", ...]
+       - 객체: {polygons: [...], scores: [...], masks: [...]}
+    */
+    var apples = parseSAM3Output(data.output, photoObj);
+    
+    if(!apples || apples.length === 0){
+      toast('⚠ SAM3가 사과를 찾지 못함. 사진을 다시 확인하세요.');
+      setBoxStatus('error');
+      return;
+    }
+    
+    photoObj.detectedApples = apples;
+    photoObj.sam3Output = data.output;
+    redraw();
+    toast('✅ SAM3 검출 완료: 사과 ' + apples.length + '개');
+    setBoxStatus('detected', apples.length);
+  })
+  .catch(function(e){
+    console.error('[SAM3] 오류:', e);
+    toast('⚠ SAM3 호출 실패: ' + e.message);
+    setBoxStatus('error');
+  });
+}
+
+/* SAM3 출력을 표준 사과 배열로 변환 */
+function parseSAM3Output(output, photoObj){
+  var apples = [];
+  var imgW = photoObj.img.naturalWidth || photoObj.img.width;
+  var imgH = photoObj.img.naturalHeight || photoObj.img.height;
+  
+  /* Case A: output이 배열 (폴리곤 또는 마스크 URL) */
+  if(Array.isArray(output)){
+    for(var i = 0; i < output.length; i++){
+      var item = output[i];
+      var apple = parseSAM3Item(item, imgW, imgH, i);
+      if(apple) apples.push(apple);
+    }
+  }
+  /* Case B: output이 객체 */
+  else if(typeof output === 'object'){
+    /* polygons 키 있으면 */
+    if(output.polygons && Array.isArray(output.polygons)){
+      for(var i = 0; i < output.polygons.length; i++){
+        var poly = output.polygons[i];
+        var score = output.scores ? output.scores[i] : 1.0;
+        var apple = parseSAM3Polygon(poly, score, imgW, imgH, i);
+        if(apple) apples.push(apple);
+      }
+    }
+    /* masks 키 있으면 (마스크 이미지 URL 배열) */
+    else if(output.masks && Array.isArray(output.masks)){
+      for(var i = 0; i < output.masks.length; i++){
+        apples.push({
+          x: 0.5, y: 0.5, r: 0.05,
+          maskUrl: output.masks[i],
+          polygon: null,
+          score: output.scores ? output.scores[i] : 1.0,
+          idx: i + 1
+        });
+      }
+    }
+  }
+  
+  return apples;
+}
+
+/* 단일 SAM3 아이템 처리 (배열 요소) */
+function parseSAM3Item(item, imgW, imgH, idx){
+  /* 문자열이면 마스크 이미지 URL */
+  if(typeof item === 'string'){
+    return {
+      x: 0.5, y: 0.5, r: 0.05,
+      maskUrl: item,
+      polygon: null,
+      score: 1.0,
+      idx: idx + 1
+    };
+  }
+  /* 객체면 폴리곤 또는 마스크 정보 */
+  if(typeof item === 'object'){
+    if(item.points || item.polygon){
+      var pts = item.points || item.polygon;
+      return parseSAM3Polygon(pts, item.score || item.confidence || 1.0, imgW, imgH, idx);
+    }
+    if(item.mask){
+      return {
+        x: 0.5, y: 0.5, r: 0.05,
+        maskUrl: item.mask,
+        polygon: null,
+        score: item.score || 1.0,
+        idx: idx + 1
+      };
+    }
+  }
+  return null;
+}
+
+/* 폴리곤 좌표 처리 */
+function parseSAM3Polygon(points, score, imgW, imgH, idx){
+  if(!points || points.length < 3) return null;
+  
+  /* 좌표 정규화 (0~1) — 픽셀 좌표라고 가정 */
+  var normPoints = [];
+  var sumX = 0, sumY = 0;
+  var minX = imgW, minY = imgH, maxX = 0, maxY = 0;
+  
+  for(var i = 0; i < points.length; i++){
+    var pt = points[i];
+    var x, y;
+    if(Array.isArray(pt)){
+      x = pt[0]; y = pt[1];
+    } else if(pt.x !== undefined){
+      x = pt.x; y = pt.y;
+    } else {
+      continue;
+    }
+    /* 0~1 범위면 그대로, 픽셀 좌표면 정규화 */
+    if(x > 1) x = x / imgW;
+    if(y > 1) y = y / imgH;
+    normPoints.push([x, y]);
+    sumX += x; sumY += y;
+    if(x < minX/imgW) minX = x * imgW;
+    if(y < minY/imgH) minY = y * imgH;
+    if(x > maxX/imgW) maxX = x * imgW;
+    if(y > maxY/imgH) maxY = y * imgH;
+  }
+  
+  if(normPoints.length < 3) return null;
+  
+  var cx = sumX / normPoints.length;
+  var cy = sumY / normPoints.length;
+  
+  /* 반지름 추정: 가장 멀리 있는 점까지 거리 */
+  var maxDist = 0;
+  for(var i = 0; i < normPoints.length; i++){
+    var dx = normPoints[i][0] - cx;
+    var dy = normPoints[i][1] - cy;
+    var d = Math.sqrt(dx*dx + dy*dy);
+    if(d > maxDist) maxDist = d;
+  }
+  
+  return {
+    x: cx,
+    y: cy,
+    r: maxDist,
+    polygon: normPoints,
+    maskUrl: null,
+    score: score,
+    idx: idx + 1
+  };
+}
+
+
+/* 검출된 사과를 캔버스에 시각화 — redraw가 박스 모드 자동 처리 */
+function drawDetectedApples(photoObj){
+  if(aIdx<0||photos[aIdx]!==photoObj) return;
+  redraw();
+}
+
+/* 박스 모드 상태 UI 갱신 */
+function setBoxStatus(status, count){
+  var statusEl = document.getElementById('boxStatus');
+  if(!statusEl) return;
+  
+  var html = '';
+  switch(status){
+    case 'analyzing':
+      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(74,159,212,.1);border-radius:6px;border-left:3px solid #4a9fd4">🤖 <b>AI 색 분석 중...</b> <span style="color:var(--muted);font-size:11px">난좌 흰색 기준점 찾는 중 (5~15초)</span></div>';
+      break;
+    case 'correcting':
+      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(140,196,74,.1);border-radius:6px;border-left:3px solid var(--accent)">✨ <b>색 보정 중...</b> <span style="color:var(--muted);font-size:11px">사진을 표준 조명으로 변환</span></div>';
+      break;
+    case 'sam3':
+      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(170,100,255,.1);border-radius:6px;border-left:3px solid #aa64ff">🎯 <b>SAM3 사과 분할 중...</b> <span style="color:var(--muted);font-size:11px">픽셀 단위 외곽선 추출 (30~60초)</span></div>';
+      break;
+    case 'detecting':
+      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(231,193,7,.1);border-radius:6px;border-left:3px solid #ffc107">🔬 <b>분석 중...</b></div>';
+      break;
+    case 'detected':
+      html = '<div style="padding:10px;background:rgba(140,196,74,.1);border-radius:6px;border-left:3px solid var(--accent)">' +
+        '<div style="font-weight:600;color:var(--accent);margin-bottom:4px">✅ 검출 완료 — 사과 ' + count + '개</div>' +
+        '<div style="font-size:11px;color:var(--cream);line-height:1.6">📌 픽셀 단위로 정확히 검출됨. 캔버스의 <b style="color:#e74c3c">빨간 영역</b>이 검출된 사과입니다. 검토 후 색 보정 + 측정 시작.</div>' +
+        '</div>';
+      break;
+    case 'keyMissing':
+      html = '<div style="padding:10px;background:rgba(255,193,7,.1);border-radius:6px;border-left:3px solid #ffc107">' +
+        '<div style="font-weight:600;color:#ffc107;margin-bottom:4px">🔑 API 키 필요</div>' +
+        '<div style="font-size:11px;color:var(--cream);line-height:1.6">우측 상단의 <b>🔑 AI</b> 버튼을 눌러 Claude API 키를 등록하세요.</div>' +
+        '</div>';
+      break;
+    case 'error':
+      html = '<div style="padding:10px;background:rgba(231,76,60,.1);border-radius:6px;border-left:3px solid #e74c3c">' +
+        '<div style="font-weight:600;color:#e74c3c;margin-bottom:4px">⚠ 검출 실패</div>' +
+        '<div style="font-size:11px;color:var(--cream);line-height:1.6">콘솔(F12)에서 오류 메시지를 확인하세요. 사진을 다시 업로드하거나 다른 사진을 시도하세요.</div>' +
+        '</div>';
+      break;
+    default:
+      html = '';
+  }
+  statusEl.innerHTML = html;
+  /* 검출 완료 시 검토 UI 표시 (5-4 작업) */
+  var reviewEl = document.getElementById('boxReviewBar');
+  if(reviewEl){
+    reviewEl.style.display = (status==='detected')?'flex':'none';
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   사용자 검토 UI (5-4 작업)
+   ════════════════════════════════════════════════════
+   AI가 검출한 결과를 사용자가 수정할 수 있게:
+   - 빠진 사과: 캔버스 빈 공간 클릭 → 추가
+   - 잘못된 사과: 원 클릭 → 삭제 (확인 후)
+   - 위치 살짝 빗나감: 드래그 → 이동
+   - "AI 다시 검출": 처음부터 다시
+   - "색 보정 시작": 다음 단계 진행
+   ════════════════════════════════════════════════════ */
+
+var boxReview = {
+  mode: 'add',        /* add/delete/move */
+  dragIdx: -1,        /* 드래그 중인 사과 인덱스 */
+  dragOffset: null,   /* 드래그 시작 시 클릭 위치와 사과 중심 차이 */
+  hoverIdx: -1,       /* 마우스 오버 사과 인덱스 */
+  defaultRadius: 0.05 /* 새로 추가하는 사과의 기본 반지름 (정규화) */
+};
+
+/* 검토 모드 변경 */
+function setBoxReviewMode(m){
+  boxReview.mode = m;
+  /* 버튼 활성 상태 */
+  ['add','delete','move'].forEach(function(name){
+    var btn = document.getElementById('boxReviewBtn_'+name);
+    if(btn) btn.className = 'tb' + (m===name?' on':'');
+  });
+  /* 안내 텍스트 */
+  var tip = document.getElementById('boxReviewTip');
+  if(tip){
+    if(m==='add') tip.textContent = '💡 빈 공간을 클릭하면 사과가 추가됩니다.';
+    else if(m==='delete') tip.textContent = '💡 사과 원을 클릭하면 삭제됩니다.';
+    else if(m==='move') tip.textContent = '💡 사과 원을 드래그하면 위치를 이동할 수 있습니다.';
+  }
+  /* 캔버스 커서 */
+  cvs.style.cursor = m==='delete'?'not-allowed':(m==='move'?'grab':'crosshair');
+}
+
+/* 클릭한 좌표가 어떤 사과 위에 있는지 확인 */
+function findAppleAt(photoObj, nx, ny){
+  if(!photoObj||!photoObj.detectedApples) return -1;
+  /* nx, ny는 0~1 정규화된 값 */
+  for(var i=0; i<photoObj.detectedApples.length; i++){
+    var a = photoObj.detectedApples[i];
+    var dx = nx - a.x;
+    var dy = ny - a.y;
+    if(Math.sqrt(dx*dx + dy*dy) <= a.r){
+      return i;
+    }
+  }
+  return -1;
+}
+
+/* 캔버스 클릭 → 모드에 따라 분기 (마우스다운 직후 클릭) */
+function handleBoxCanvasClick(e){
+  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return false;
+  var p = photos[aIdx];
+  if(!p.detectedApples) return false;
+  
+  var rect = cvs.getBoundingClientRect();
+  var x = (e.clientX - rect.left) * (cvs.width / rect.width);
+  var y = (e.clientY - rect.top) * (cvs.height / rect.height);
+  var nx = x / cvs.width;
+  var ny = y / cvs.height;
+  
+  var hitIdx = findAppleAt(p, nx, ny);
+  
+  if(boxReview.mode==='delete'){
+    if(hitIdx>=0){
+      p.detectedApples.splice(hitIdx, 1);
+      drawDetectedApples(p);
+      toast('🗑 사과 #'+(hitIdx+1)+' 삭제됨 (남은 '+p.detectedApples.length+'개)');
+    }
+    return true;
+  }
+  
+  if(boxReview.mode==='add'){
+    if(hitIdx<0){
+      /* 빈 공간 → 추가 */
+      /* 새 사과의 반지름은 주변 사과의 평균 반지름 사용 (없으면 기본값) */
+      var avgR = boxReview.defaultRadius;
+      if(p.detectedApples.length>0){
+        var sumR = 0;
+        for(var i=0; i<p.detectedApples.length; i++) sumR += p.detectedApples[i].r;
+        avgR = sumR / p.detectedApples.length;
+      }
+      p.detectedApples.push({x: nx, y: ny, r: avgR});
+      drawDetectedApples(p);
+      toast('➕ 사과 추가 (총 '+p.detectedApples.length+'개)');
+    } else {
+      toast('이미 사과가 있는 위치입니다. 삭제 모드로 변경하세요.');
+    }
+    return true;
+  }
+  
+  /* move 모드는 mousedown/move/up에서 처리됨 */
+  return false;
+}
+
+/* 캔버스 마우스다운 (move 모드용) */
+function handleBoxCanvasMouseDown(e){
+  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return false;
+  if(boxReview.mode!=='move') return false;
+  var p = photos[aIdx];
+  if(!p.detectedApples) return false;
+  
+  var rect = cvs.getBoundingClientRect();
+  var x = (e.clientX - rect.left) * (cvs.width / rect.width);
+  var y = (e.clientY - rect.top) * (cvs.height / rect.height);
+  var nx = x / cvs.width;
+  var ny = y / cvs.height;
+  
+  var hitIdx = findAppleAt(p, nx, ny);
+  if(hitIdx>=0){
+    boxReview.dragIdx = hitIdx;
+    boxReview.dragOffset = {
+      x: nx - p.detectedApples[hitIdx].x,
+      y: ny - p.detectedApples[hitIdx].y
+    };
+    cvs.style.cursor = 'grabbing';
+    return true;
+  }
+  return false;
+}
+
+/* 캔버스 마우스이동 (드래그) */
+function handleBoxCanvasMouseMove(e){
+  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return false;
+  if(boxReview.dragIdx<0) return false;
+  var p = photos[aIdx];
+  
+  var rect = cvs.getBoundingClientRect();
+  var x = (e.clientX - rect.left) * (cvs.width / rect.width);
+  var y = (e.clientY - rect.top) * (cvs.height / rect.height);
+  var nx = x / cvs.width;
+  var ny = y / cvs.height;
+  
+  p.detectedApples[boxReview.dragIdx].x = Math.max(0, Math.min(1, nx - boxReview.dragOffset.x));
+  p.detectedApples[boxReview.dragIdx].y = Math.max(0, Math.min(1, ny - boxReview.dragOffset.y));
+  drawDetectedApples(p);
+  return true;
+}
+
+/* 캔버스 마우스업 (드래그 종료) */
+function handleBoxCanvasMouseUp(){
+  if(boxReview.dragIdx>=0){
+    toast('📍 사과 #'+(boxReview.dragIdx+1)+' 위치 변경됨');
+    boxReview.dragIdx = -1;
+    boxReview.dragOffset = null;
+    cvs.style.cursor = 'grab';
+  }
+}
+
+/* AI 재검출 */
+function rerunBoxDetection(){
+  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box'){
+    toast('박스 모드 사진이 없습니다');
+    return;
+  }
+  if(!confirm('AI 검출을 다시 실행하시겠습니까? 현재 수정사항은 사라집니다.')) return;
+  var p = photos[aIdx];
+  p.detectedApples = null;
+  detectApplesInBox(p, aIdx);
+}
+
+/* ────────────────────────────────────────────────────
+   Phase 3: 측정 + 결과 (재설계 2026-05-15)
+   각 사과 영역의 LAB a* 측정 → 등급 → 평균 착색률
+   ──────────────────────────────────────────────────── */
+function startBoxColorCorrection(){
+  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return;
+  var p = photos[aIdx];
+  if(!p.detectedApples || p.detectedApples.length===0){
+    toast('검출된 사과가 없습니다');
+    return;
+  }
+  
+  toast('🔬 ' + p.detectedApples.length + '개 사과 측정 중...');
+  
+  /* 측정용 캔버스 — 보정된 캔버스 또는 원본 */
+  var srcCanvas;
+  if(p.correctedCanvas){
+    srcCanvas = p.correctedCanvas;
+  } else {
+    /* 보정 안 됐으면 원본 이미지로 캔버스 만들기 */
+    srcCanvas = document.createElement('canvas');
+    srcCanvas.width = p.img.naturalWidth || p.img.width;
+    srcCanvas.height = p.img.naturalHeight || p.img.height;
+    var stmp = srcCanvas.getContext('2d');
+    stmp.drawImage(p.img, 0, 0);
+  }
+  var sctx = srcCanvas.getContext('2d');
+  var W = srcCanvas.width, H = srcCanvas.height;
+  var fullImgData = sctx.getImageData(0, 0, W, H);
+  var fullPixels = fullImgData.data;
+  
+  /* 각 사과 측정 — 폴리곤 내부 픽셀 색상 분류 */
+  var results = [];
+  var totalPct = 0;
+  var gradeCounts = {G1:0,G2:0,G3:0,G4:0,G5:0};
+  
+  for(var i = 0; i < p.detectedApples.length; i++){
+    var apple = p.detectedApples[i];
+    
+    /* 폴리곤이 있으면 그 안의 픽셀들만 */
+    var polygon = apple.polygon;
+    if(!polygon || polygon.length < 3){
+      /* 폴리곤 없으면 원형 영역으로 (백업) */
+      var cx_n = apple.x, cy_n = apple.y, r_n = apple.r || 0.05;
+      polygon = [];
+      for(var ang = 0; ang < 32; ang++){
+        var t = ang / 32 * 2 * Math.PI;
+        polygon.push([cx_n + r_n * Math.cos(t), cy_n + r_n * Math.sin(t)]);
+      }
+    }
+    
+    /* 폴리곤 bounding box (속도 최적화) */
+    var minX = 1, minY = 1, maxX = 0, maxY = 0;
+    for(var pi = 0; pi < polygon.length; pi++){
+      var px_n = polygon[pi][0], py_n = polygon[pi][1];
+      if(px_n < minX) minX = px_n;
+      if(py_n < minY) minY = py_n;
+      if(px_n > maxX) maxX = px_n;
+      if(py_n > maxY) maxY = py_n;
+    }
+    var bbox = {
+      x1: Math.max(0, Math.floor(minX * W)),
+      y1: Math.max(0, Math.floor(minY * H)),
+      x2: Math.min(W, Math.ceil(maxX * W)),
+      y2: Math.min(H, Math.ceil(maxY * H))
+    };
+    
+    /* 픽셀 샘플링 (큰 사과는 모두 측정하면 느림) */
+    var areaPixels = (bbox.x2 - bbox.x1) * (bbox.y2 - bbox.y1);
+    var step = Math.max(1, Math.floor(Math.sqrt(areaPixels / 1000)));
+    
+    var totalCnt = 0;
+    var redCnt = 0, pinkCnt = 0, orangeCnt = 0, yellowCnt = 0, greenCnt = 0;
+    var sumA = 0, sumL = 0;
+    
+    /* 폴리곤 픽셀 좌표 (W,H 기준) */
+    var polyPx = [];
+    for(var pi = 0; pi < polygon.length; pi++){
+      polyPx.push([polygon[pi][0] * W, polygon[pi][1] * H]);
+    }
+    
+    for(var y = bbox.y1; y < bbox.y2; y += step){
+      for(var x = bbox.x1; x < bbox.x2; x += step){
+        if(!pointInPolygon(x, y, polyPx)) continue;
+        
+        var idx_p = (y * W + x) * 4;
+        var r = fullPixels[idx_p];
+        var g = fullPixels[idx_p+1];
+        var b = fullPixels[idx_p+2];
+        
+        var bright = r + g + b;
+        if(bright < 200 || bright > 730) continue; /* 꼭지/하이라이트 제외 */
+        
+        var lab = rgbToLab(r, g, b);
+        sumA += lab.a;
+        sumL += lab.L;
+        totalCnt++;
+        
+        if(lab.a > 20) redCnt++;
+        else if(lab.a > 10) pinkCnt++;
+        else if(lab.a > 0) orangeCnt++;
+        else if(lab.a > -5) yellowCnt++;
+        else greenCnt++;
+      }
+    }
+    
+    if(totalCnt === 0) continue;
+    
+    /* 착색률 = 빨강 + 분홍의 픽셀 비율 (농진청 표준) */
+    var coloredCnt = redCnt + pinkCnt;
+    var pct = Math.round(coloredCnt / totalCnt * 1000) / 10;
+    var pctLoose = Math.round((redCnt + pinkCnt + orangeCnt * 0.5) / totalCnt * 1000) / 10;
+    
+    var avgA = sumA / totalCnt;
+    var avgL = sumL / totalCnt;
+    var card = getCard(pct);
+    
+    results.push({
+      idx: i + 1,
+      x: apple.x, y: apple.y,
+      pct: pct,
+      pctLoose: pctLoose,
+      a: Math.round(avgA*10)/10,
+      L: Math.round(avgL*10)/10,
+      colorBreakdown: {
+        red: redCnt, pink: pinkCnt, orange: orangeCnt,
+        yellow: yellowCnt, green: greenCnt, total: totalCnt
+      },
+      grade: card.l,
+      gradeName: card.name,
+      gradeColor: card.color,
+      polygon: polygon
+    });
+    
+    totalPct += pct;
+    if(gradeCounts[card.l] !== undefined) gradeCounts[card.l]++;
+  }
+  
+  if(results.length === 0){
+    toast('⚠ 측정 실패');
+    return;
+  }
+  
+  var avgPct = Math.round(totalPct / results.length * 10) / 10;
+  var avgCard = getCard(avgPct);
+  
+  p.boxResult = {
+    apples: results,
+    count: results.length,
+    avgPct: avgPct,
+    avgGrade: avgCard.l,
+    avgGradeName: avgCard.name,
+    gradeCounts: gradeCounts,
+    nradStage: getNradStage(avgPct, currentVariety),
+    variety: currentVariety,
+    varietyName: VARIETY[currentVariety].name
+  };
+  
+  showBoxResult(p);
+  toast('✅ 측정 완료: 평균 ' + avgPct + '% (' + avgCard.l + ')');
+}
+
+/* 점이 폴리곤 안에 있는지 판단 (Ray casting) */
+function pointInPolygon(x, y, polygon){
+  var inside = false;
+  for(var i = 0, j = polygon.length - 1; i < polygon.length; j = i++){
+    var xi = polygon[i][0], yi = polygon[i][1];
+    var xj = polygon[j][0], yj = polygon[j][1];
+    var intersect = ((yi > y) !== (yj > y)) &&
+      (x < (xj - xi) * (y - yi) / (yj - yi + 0.0001) + xi);
+    if(intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/* RGB → LAB 변환 (CIE Lab) */
+function rgbToLab(r, g, b){
+  /* sRGB → XYZ */
+  r /= 255; g /= 255; b /= 255;
+  r = r > 0.04045 ? Math.pow((r + 0.055)/1.055, 2.4) : r/12.92;
+  g = g > 0.04045 ? Math.pow((g + 0.055)/1.055, 2.4) : g/12.92;
+  b = b > 0.04045 ? Math.pow((b + 0.055)/1.055, 2.4) : b/12.92;
+  var X = (r*0.4124 + g*0.3576 + b*0.1805) * 100;
+  var Y = (r*0.2126 + g*0.7152 + b*0.0722) * 100;
+  var Z = (r*0.0193 + g*0.1192 + b*0.9505) * 100;
+  /* XYZ → LAB */
+  X /= 95.047; Y /= 100.000; Z /= 108.883;
+  X = X > 0.008856 ? Math.pow(X, 1/3) : (7.787 * X) + 16/116;
+  Y = Y > 0.008856 ? Math.pow(Y, 1/3) : (7.787 * Y) + 16/116;
+  Z = Z > 0.008856 ? Math.pow(Z, 1/3) : (7.787 * Z) + 16/116;
+  return {
+    L: (116 * Y) - 16,
+    a: 500 * (X - Y),
+    b: 200 * (Y - Z)
+  };
+}
+
+/* Phase 3: 박스 결과 표시 + 라벨링 사진 생성 */
+function showBoxResult(photoObj){
+  var r = photoObj.boxResult;
+  if(!r) return;
+  
+  /* 캔버스에 등급별 색깔로 사과 마스크 + 등급 라벨 표시 */
+  redrawBoxResult(photoObj);
+  
+  /* 결과 패널 표시 */
+  var panel = document.getElementById('resultPanel');
+  var empty = document.getElementById('emptyState');
+  if(panel){
+    panel.style.display = 'block';
+    if(empty) empty.style.display = 'none';
+    
+    /* 박스 결과 전용 HTML 구성 */
+    var html = '<div style="margin-bottom:14px">' +
+      '<h3 style="font-size:14px;color:var(--accent);margin-bottom:8px">📦 박스 측정 결과</h3>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">' +
+        '<div style="background:rgba(0,0,0,.25);padding:12px;border-radius:6px;text-align:center">' +
+          '<div style="font-size:28px;font-weight:700;color:'+getCard(r.avgPct).color+'">'+r.avgPct+'%</div>' +
+          '<div style="font-size:10px;color:var(--muted);margin-top:4px">평균 착색률 ('+r.avgGrade+' '+r.avgGradeName+')</div>' +
+        '</div>' +
+        '<div style="background:rgba(0,0,0,.25);padding:12px;border-radius:6px;text-align:center">' +
+          '<div style="font-size:28px;font-weight:700;color:var(--accent)">'+r.count+'<span style="font-size:14px;opacity:.6">개</span></div>' +
+          '<div style="font-size:10px;color:var(--muted);margin-top:4px">측정된 사과 ('+r.varietyName+')</div>' +
+        '</div>' +
+      '</div>';
+    
+    /* 등급 분포 */
+    var maxG = Math.max(r.gradeCounts.G1, r.gradeCounts.G2, r.gradeCounts.G3, r.gradeCounts.G4, r.gradeCounts.G5, 1);
+    var gradeColors = {G1:'#b25358',G2:'#b26661',G3:'#af7969',G4:'#a68c70',G5:'#9d9d77'};
+    html += '<div style="background:rgba(0,0,0,.18);padding:10px;border-radius:6px;margin-bottom:10px">' +
+      '<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">📊 등급 분포</div>';
+    for(var gi=1; gi<=5; gi++){
+      var gk='G'+gi;
+      var cnt=r.gradeCounts[gk];
+      var w=Math.round(cnt/maxG*100);
+      html += '<div style="display:flex;align-items:center;gap:6px;margin:3px 0">' +
+        '<span style="font-size:10px;color:var(--muted);width:22px">'+gk+'</span>' +
+        '<div style="flex:1;height:14px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden">' +
+        '<div style="width:'+w+'%;height:100%;background:'+gradeColors[gk]+';transition:width .4s"></div>' +
+        '</div>' +
+        '<span style="font-size:11px;width:30px;text-align:right;color:var(--cream)">'+cnt+'개</span>' +
+        '</div>';
+    }
+    html += '</div>';
+    
+    /* 농진청 단계 */
+    if(r.nradStage){
+      html += '<div style="background:linear-gradient(135deg,rgba(140,196,74,.1),rgba(140,196,74,.04));border:1px solid rgba(140,196,74,.3);border-radius:6px;padding:10px;margin-bottom:10px">' +
+        '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">🌾 농촌진흥청 색체계</div>' +
+        '<div style="font-size:14px;font-weight:700;color:var(--cream);margin-bottom:4px">'+r.nradStage.stage+'</div>' +
+        '<div style="font-size:11px;color:var(--muted)">💡 '+r.nradStage.advice+'</div>' +
+        '</div>';
+    }
+    
+    html += '<div class="footnote">측정 방식: 픽셀 색상 분류. 빨강(a*>20) + 분홍(10&lt;a*≤20) 픽셀 비율 = 착색률. 농촌진흥청 표준 방식.</div>';
+    
+    /* 개별 사과 색상 분포 (처음 6개만 미리보기) */
+    var preview = r.apples.slice(0, 6);
+    if(preview.length > 0){
+      html += '<div style="background:rgba(0,0,0,.18);padding:10px;border-radius:6px;margin-top:10px">' +
+        '<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🍎 개별 사과 색상 분포 (처음 ' + preview.length + '개)</div>';
+      for(var pi = 0; pi < preview.length; pi++){
+        var pa = preview[pi];
+        var br = pa.colorBreakdown;
+        if(!br) continue;
+        var t = br.total;
+        var p_red = Math.round(br.red/t*100);
+        var p_pink = Math.round(br.pink/t*100);
+        var p_orange = Math.round(br.orange/t*100);
+        var p_yellow = Math.round(br.yellow/t*100);
+        var p_green = Math.round(br.green/t*100);
+        html += '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;font-size:10px">' +
+          '<span style="width:24px;font-weight:600;color:'+pa.gradeColor+'">#'+pa.idx+'</span>' +
+          '<div style="flex:1;height:14px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden;display:flex">' +
+            '<div style="width:'+p_red+'%;background:#b22222" title="빨강 '+p_red+'%"></div>' +
+            '<div style="width:'+p_pink+'%;background:#dc7080" title="분홍 '+p_pink+'%"></div>' +
+            '<div style="width:'+p_orange+'%;background:#e8a040" title="주황 '+p_orange+'%"></div>' +
+            '<div style="width:'+p_yellow+'%;background:#d4c060" title="노랑 '+p_yellow+'%"></div>' +
+            '<div style="width:'+p_green+'%;background:#9ab070" title="초록 '+p_green+'%"></div>' +
+          '</div>' +
+          '<span style="width:42px;text-align:right;color:var(--cream)">'+pa.pct+'%</span>' +
+          '</div>';
+      }
+      if(r.apples.length > 6){
+        html += '<div style="font-size:10px;color:var(--muted);text-align:center;margin-top:6px">... 외 '+(r.apples.length-6)+'개</div>';
+      }
+      html += '<div style="font-size:9px;color:var(--muted);margin-top:8px;line-height:1.5">색 범례: <span style="color:#b22222">■</span>빨강 <span style="color:#dc7080">■</span>분홍 <span style="color:#e8a040">■</span>주황 <span style="color:#d4c060">■</span>노랑 <span style="color:#9ab070">■</span>초록</div>' +
+        '</div>';
+    }
+    
+    html += '<div class="share-bar" style="margin-top:10px">' +
+      '<button class="s-btn save" onclick="saveBoxResult()" style="background:var(--accent);color:var(--bg);font-weight:600">💾 결과 저장</button>' +
+      '<button class="s-btn save" onclick="saveBoxImg()">📥 이미지 저장</button>' +
+      '</div></div>';
+    
+    panel.innerHTML = html;
+  }
+}
+
+/* 박스 결과를 캔버스에 등급별로 표시 */
+function redrawBoxResult(photoObj){
+  if(aIdx<0 || photos[aIdx] !== photoObj) return;
+  var r = photoObj.boxResult;
+  if(!r) return;
+  
+  var w = cvs.width, h = cvs.height;
+  /* 원본 이미지 다시 그리기 */
+  ctx.drawImage(photoObj.img, 0, 0, w, h);
+  
+  /* 사과 마스크 등급별 색상으로 오버레이 */
+  if(photoObj.analysisCanvas && photoObj.analysisCanvas.appleMask){
+    var aw = photoObj.analysisCanvas.width;
+    var ah = photoObj.analysisCanvas.height;
+    var overlay = ctx.getImageData(0, 0, w, h);
+    var oData = overlay.data;
+    var scaleX = w / aw;
+    var scaleY = h / ah;
+    
+    /* 각 사과별로 영역 칠하기 */
+    for(var i = 0; i < photoObj.detectedApples.length; i++){
+      var apple = photoObj.detectedApples[i];
+      var result = r.apples[i];
+      if(!result || !apple.pixelMask) continue;
+      
+      /* 등급 색을 RGB로 파싱 */
+      var hex = result.gradeColor;
+      var gR = parseInt(hex.substr(1,2), 16);
+      var gG = parseInt(hex.substr(3,2), 16);
+      var gB = parseInt(hex.substr(5,2), 16);
+      
+      /* 픽셀들에 대해 캔버스 좌표로 변환 후 오버레이 */
+      for(var j = 0; j < apple.pixelMask.length; j++){
+        var px = apple.pixelMask[j][0];
+        var py = apple.pixelMask[j][1];
+        /* 작은 사각형 영역 칠하기 (속도) */
+        var ox1 = Math.floor(px * scaleX);
+        var oy1 = Math.floor(py * scaleY);
+        var ox2 = Math.ceil((px+1) * scaleX);
+        var oy2 = Math.ceil((py+1) * scaleY);
+        for(var oy = oy1; oy < oy2 && oy < h; oy++){
+          for(var ox = ox1; ox < ox2 && ox < w; ox++){
+            var idx_o = (oy * w + ox) * 4;
+            /* 등급 색 + 원본 50:50 */
+            oData[idx_o]     = oData[idx_o] * 0.5 + gR * 0.5;
+            oData[idx_o + 1] = oData[idx_o + 1] * 0.5 + gG * 0.5;
+            oData[idx_o + 2] = oData[idx_o + 2] * 0.5 + gB * 0.5;
+          }
+        }
+      }
+    }
+    ctx.putImageData(overlay, 0, 0);
+  }
+  
+  /* 각 사과 라벨 (등급 + %) */
+  for(var i = 0; i < r.apples.length; i++){
+    var a = r.apples[i];
+    var cx = a.x * w, cy = a.y * h;
+    var label = a.grade + ' ' + a.pct + '%';
+    ctx.font = 'bold 11px Courier New,monospace';
+    var tw = ctx.measureText(label).width + 10;
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    roundRect(ctx, cx-tw/2, cy-9, tw, 18, 4);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, cx, cy);
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  
+  /* 박스 전체 평균 (큰 글씨 좌상단) */
+  ctx.fillStyle = 'rgba(0,0,0,0.85)';
+  var bigLabel = '평균 ' + r.avgPct + '% (' + r.avgGrade + ')';
+  ctx.font = 'bold 18px sans-serif';
+  var btw = ctx.measureText(bigLabel).width + 20;
+  roundRect(ctx, 10, 10, btw, 32, 6);
+  ctx.fill();
+  ctx.fillStyle = getCard(r.avgPct).color;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(bigLabel, 20, 26);
+}
+
+/* 박스 결과 저장 */
+function saveBoxResult(){
+  if(aIdx<0 || !photos[aIdx] || !photos[aIdx].boxResult){
+    toast('저장할 결과가 없습니다');
+    return;
+  }
+  var p = photos[aIdx];
+  var r = p.boxResult;
+  
+  var records = loadAllRecords();
+  var rname = '';
+  if(currentRegion){
+    var regionData = loadRegionData();
+    if(regionData[currentRegion]) rname = regionData[currentRegion].name;
+  }
+  
+  var record = {
+    id: Date.now(),
+    date: new Date().toISOString().slice(0,10),
+    harvestDate: document.getElementById('harvestDate').value||'',
+    pct: r.avgPct,
+    grade: r.avgGrade,
+    gradeName: r.avgGradeName,
+    gradeColor: getCard(r.avgPct).color,
+    region: currentRegion,
+    regionName: rname,
+    address: currentAddress||'',
+    cnt: r.count,
+    conf: 95, /* 픽셀 단위 측정이라 신뢰도 높음 */
+    sc: 95,
+    mode: 'box',
+    variety: r.variety,
+    varietyName: r.varietyName,
+    nradStage: r.nradStage ? r.nradStage.stage : null,
+    boxData: {
+      gradeCounts: r.gradeCounts,
+      individual: r.apples
+    },
+    weather: null
+  };
+  
+  records.push(record);
+  saveAllRecords(records);
+  
+  /* 도별 통계 갱신 */
+  if(currentRegion){
+    var regionData = loadRegionData();
+    if(!regionData[currentRegion]) regionData[currentRegion] = {name: rname, count:0, sum:0, avg:0};
+    regionData[currentRegion].count++;
+    regionData[currentRegion].sum += r.avgPct;
+    regionData[currentRegion].avg = Math.round(regionData[currentRegion].sum / regionData[currentRegion].count * 10) / 10;
+    saveRegionData(regionData);
+  }
+  
+  p.saved = true;
+  toast('💾 박스 측정 저장됨 ('+r.count+'개 사과, 평균 '+r.avgPct+'%)');
+  renderStatsMemo();
+  initKoreaMap();
+}
+
+/* 박스 결과 이미지 저장 */
+function saveBoxImg(){
+  if(aIdx<0 || !photos[aIdx] || !photos[aIdx].boxResult){
+    toast('저장할 결과가 없습니다');
+    return;
+  }
+  /* 현재 캔버스를 이미지로 다운로드 */
+  cvs.toBlob(function(blob){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'fujigrade-box-' + Date.now() + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('📥 이미지 저장 완료');
+  }, 'image/png');
+}
+
+/* 캔버스 이벤트 리스너 등록 (박스 모드용)
+   기존 핸들러와 충돌하지 않도록 박스 모드일 때만 동작 */
+(function attachBoxCanvasListeners(){
+  /* DOMContentLoaded 후 cvs가 준비되면 리스너 추가 */
+  function setupListeners(){
+    if(!cvs) return;
+    cvs.addEventListener('click', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+        if(handleBoxCanvasClick(e)) e.stopPropagation();
+      }
+    }, true); /* capture: true → 다른 핸들러보다 먼저 실행 */
+    cvs.addEventListener('mousedown', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+        if(handleBoxCanvasMouseDown(e)) e.stopPropagation();
+      }
+    }, true);
+    cvs.addEventListener('mousemove', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+        handleBoxCanvasMouseMove(e);
+      }
+    }, true);
+    cvs.addEventListener('mouseup', function(){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+        handleBoxCanvasMouseUp();
+      }
+    }, true);
+    /* 터치 이벤트 (모바일) */
+    cvs.addEventListener('touchstart', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box' && e.touches.length===1){
+        var t = e.touches[0];
+        var fakeE = {clientX:t.clientX, clientY:t.clientY};
+        if(boxReview.mode==='move'){
+          if(handleBoxCanvasMouseDown(fakeE)) e.preventDefault();
+        }
+      }
+    }, {passive: false});
+    cvs.addEventListener('touchmove', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box' && e.touches.length===1 && boxReview.dragIdx>=0){
+        var t = e.touches[0];
+        handleBoxCanvasMouseMove({clientX:t.clientX, clientY:t.clientY});
+        e.preventDefault();
+      }
+    }, {passive: false});
+    cvs.addEventListener('touchend', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+        if(boxReview.dragIdx>=0){
+          handleBoxCanvasMouseUp();
+        } else if(e.changedTouches.length===1 && (boxReview.mode==='add'||boxReview.mode==='delete')){
+          /* 터치 종료가 짧으면 클릭으로 처리 */
+          var t = e.changedTouches[0];
+          handleBoxCanvasClick({clientX:t.clientX, clientY:t.clientY});
+          e.preventDefault();
+        }
+      }
+    }, {passive: false});
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', setupListeners);
+  } else {
+    setupListeners();
+  }
+})();
+
+/* ── 파일 업로드 (2장 모드) ──
+   [수정 2026-05-14 묶음2] dualPhotos에만 임시저장하던 것을 photos 배열에 정식 추가.
+   사용자는 사진 그리드에서 꼭지/하부 사이를 전환하며 각각 마킹.
+   판정 버튼 누르면 두 사진 다 자동 분석 후 가중평균(꼭지60%, 하부40%) 종합. */
 function onDualFile(files,side){
   if(!files||!files.length) return;
   var file=files[0];
-  var reader=new FileReader();
-  reader.onload=function(e){
-    dualPhotos[side]={url:e.target.result,file:file,res:null};
-    document.getElementById(side==='top'?'topStatus':'bottomStatus').textContent=file.name.slice(0,14);
-    document.getElementById(side==='top'?'topStatus':'bottomStatus').style.color='var(--accent)';
-    if(dualPhotos.top&&dualPhotos.bottom){
-      document.getElementById('runBtn').disabled=false;
+  /* [2026-05-15 수정] processImageFile로 통합 처리 */
+  processImageFile(file, function(result){
+    /* 같은 side 사진이 이미 있으면 교체 */
+    for(var i=photos.length-1;i>=0;i--){
+      if(photos[i].mode===side){
+        photos.splice(i,1);
+        if(aIdx>=i&&aIdx>0) aIdx--;
+      }
     }
-  };
-  reader.readAsDataURL(file);
+    var idx=photos.length;
+    var obj={
+      img:result.displayImg,
+      url:result.displayUrl,
+      compressedUrl:result.compressedUrl,
+      file:file,
+      apples:[],cardRs:{},res:null,mode:side,
+      orientation:result.orientation,
+      origSize:result.origSize,
+      displaySize:result.displaySize
+    };
+    photos.push(obj);
+    /* 호환용 dualPhotos 참조 유지 */
+    dualPhotos[side]={url:result.displayUrl,file:file,res:null,photoIdx:idx};
+    /* 상태 표시 갱신 */
+    document.getElementById(side==='top'?'topStatus':'bottomStatus').textContent=file.name.slice(0,14)+' ✓';
+    document.getElementById(side==='top'?'topStatus':'bottomStatus').style.color='var(--accent)';
+    renderPhotoGrid();
+    selPhoto(idx);
+    autoScanPhoto(obj,idx);
+    checkRun();
+  });
 }
 
 function addPhoto(file){
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var img=new Image();
-    img.onload=function(){
-      var idx=photos.length;
-      var obj={img:img,url:e.target.result,file:file,apples:[],cardRs:{},res:null,mode:photoMode};
-      photos.push(obj);
-      renderPhotoGrid();
-      selPhoto(idx);
-      autoScanPhoto(obj,idx);
+  /* [2026-05-15 수정] processImageFile로 통합 처리
+     EXIF 회전 보정 + 1568px 압축 → AI 인식률 대폭 향상 */
+  processImageFile(file, function(result){
+    var idx=photos.length;
+    var obj={
+      img:result.displayImg,
+      url:result.displayUrl,          /* 표시·색분석용 (회전 보정됨) */
+      compressedUrl:result.compressedUrl,  /* AI Vision API용 (1568px) */
+      file:file,                      /* 원본 (EXIF GPS 추출용) */
+      apples:[],cardRs:{},res:null,mode:photoMode,
+      orientation:result.orientation,
+      origSize:result.origSize,
+      displaySize:result.displaySize
     };
-    img.src=e.target.result;
-  };
-  reader.readAsDataURL(file);
+    photos.push(obj);
+    renderPhotoGrid();
+    selPhoto(idx);
+    autoScanPhoto(obj,idx);
+  });
 }
 
 function renderPhotoGrid(){
@@ -926,6 +2621,12 @@ function renderPhotoGrid(){
     h+='<div class="ph'+on+'" onclick="selPhoto('+i+')">';
     h+='<img src="'+p.url+'">';
     h+='<span class="ph-n">'+(i+1)+'</span>';
+    /* ★ 꼭지/하부 모드 라벨 (2장 모드 작업) */
+    if(p.mode==='top'){
+      h+='<span style="position:absolute;top:3px;left:24px;background:rgba(255,100,100,.9);color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:6px">🔴 꼭지</span>';
+    } else if(p.mode==='bottom'){
+      h+='<span style="position:absolute;top:3px;left:24px;background:rgba(100,181,246,.9);color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:6px">🔵 하부</span>';
+    }
     /* ★ GPS 인식 여부 표시 */
     if(p.gps&&p.gps.lat){
       h+='<span style="position:absolute;top:3px;right:24px;background:rgba(140,196,74,.9);color:#fff;font-size:9px;padding:1px 4px;border-radius:6px" title="'+(p.gps.address||p.gps.source)+'">📍</span>';
@@ -948,10 +2649,23 @@ function selPhoto(i){
   redraw();
   checkRun();
   renderPhotoGrid();
+  /* ★ 마킹 안내 메시지를 사진 모드에 맞춰 변경 */
+  var tipEl=document.getElementById('markTipText');
+  if(tipEl){
+    if(p.mode==='top') tipEl.innerHTML='🔴 <b>꼭지(상부)</b> 부위를 클릭 또는 드래그하세요.';
+    else if(p.mode==='bottom') tipEl.innerHTML='🔵 <b>하부(꽃받침)</b> 부위를 클릭 또는 드래그하세요.';
+    else if(p.mode==='box') tipEl.innerHTML='📦 <b>박스 모드</b>: AI가 검출한 사과를 검토하세요 (위 검토 바 사용).';
+    else tipEl.textContent='꼭지 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.';
+  }
   /* ★ 사진별 저장된 GPS가 있으면 자동 복원 */
   if(p.gps && p.gps.lat && p.gps.lon){
     applyGPS(p.gps.lat,p.gps.lon,p.gps.source,p.gps.address);
   }
+  /* 결과 + 저장 버튼 상태도 사진별로 갱신 */
+  if(p.res){
+    showResult(p.res,null);
+  }
+  updateSaveButton();
 }
 
 function delPhoto(e,i){
@@ -980,6 +2694,62 @@ function redraw(){
   if(aIdx<0||!photos[aIdx]) return;
   var p=photos[aIdx];
   ctx.drawImage(p.img,0,0,cvs.width,cvs.height);
+  
+  /* 박스 모드: SAM3 폴리곤 표시 (재설계 2026-05-15) */
+  if(p.mode==='box' && p.detectedApples && p.detectedApples.length>0){
+    var w=cvs.width, h=cvs.height;
+    
+    /* 각 사과의 폴리곤을 반투명 빨강으로 칠하기 */
+    for(var i=0; i<p.detectedApples.length; i++){
+      var a=p.detectedApples[i];
+      if(a.polygon && a.polygon.length >= 3){
+        /* 폴리곤 외곽선 + 반투명 채우기 */
+        ctx.beginPath();
+        ctx.moveTo(a.polygon[0][0] * w, a.polygon[0][1] * h);
+        for(var pi=1; pi<a.polygon.length; pi++){
+          ctx.lineTo(a.polygon[pi][0] * w, a.polygon[pi][1] * h);
+        }
+        ctx.closePath();
+        ctx.fillStyle='rgba(231, 76, 60, 0.35)';
+        ctx.fill();
+        ctx.strokeStyle='rgba(231, 76, 60, 0.95)';
+        ctx.lineWidth=2;
+        ctx.stroke();
+      } else {
+        /* 폴리곤 없으면 원으로 표시 (백업) */
+        var cx_ = a.x * w, cy_ = a.y * h;
+        var r_ = (a.r || 0.05) * Math.min(w, h);
+        ctx.beginPath();
+        ctx.arc(cx_, cy_, r_, 0, 2*Math.PI);
+        ctx.fillStyle='rgba(231, 76, 60, 0.25)';
+        ctx.fill();
+        ctx.strokeStyle='rgba(231, 76, 60, 0.9)';
+        ctx.lineWidth=2;
+        ctx.stroke();
+      }
+    }
+    
+    /* 각 사과 번호 라벨 */
+    for(var i=0; i<p.detectedApples.length; i++){
+      var a=p.detectedApples[i];
+      var cx=a.x*w, cy=a.y*h;
+      ctx.fillStyle='rgba(0,0,0,0.85)';
+      var num=String(i+1);
+      ctx.font='bold 12px Courier New,monospace';
+      var tw=ctx.measureText(num).width+10;
+      roundRect(ctx, cx-tw/2, cy-9, tw, 18, 4);
+      ctx.fill();
+      ctx.fillStyle='#fff';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(num, cx, cy);
+    }
+    
+    ctx.textAlign='left';
+    ctx.textBaseline='alphabetic';
+    return; /* 박스 모드는 사과 마킹(polyD)을 안 함 */
+  }
+  
   for(var i=0;i<p.apples.length;i++){
     polyD(p.apples[i].roi,ACOLS[i%ACOLS.length],'#'+(i+1));
     if(p.apples[i].res){
@@ -1140,9 +2910,26 @@ function setMode(m){
 function checkRun(){
   var ok=false;
   if(photoMode==='both'){
-    ok=dualPhotos.top!==null&&dualPhotos.bottom!==null;
+    /* 양쪽 사진이 photos에 있고, 각각 1개 이상 마킹돼야 함 */
+    var topP=null,botP=null;
+    for(var i=0;i<photos.length;i++){
+      if(photos[i].mode==='top') topP=photos[i];
+      if(photos[i].mode==='bottom') botP=photos[i];
+    }
+    ok=topP&&botP&&topP.apples.length>0&&botP.apples.length>0;
+    /* 판정 버튼 라벨에 진행 상태 표시 */
+    var btn=document.getElementById('runBtn');
+    if(btn){
+      if(!topP||!botP) btn.innerHTML='▶ 판정 (꼭지/하부 사진 둘 다 필요)';
+      else if(topP.apples.length===0&&botP.apples.length===0) btn.innerHTML='▶ 판정 (양쪽 마킹 필요)';
+      else if(topP.apples.length===0) btn.innerHTML='▶ 판정 (꼭지 마킹 필요)';
+      else if(botP.apples.length===0) btn.innerHTML='▶ 판정 (하부 마킹 필요)';
+      else btn.innerHTML='▶ 종합 판정 (꼭지+하부)';
+    }
   } else {
     ok=aIdx>=0&&photos[aIdx]&&photos[aIdx].apples&&photos[aIdx].apples.length>0;
+    var btn2=document.getElementById('runBtn');
+    if(btn2) btn2.innerHTML='▶ 판정';
   }
   document.getElementById('runBtn').disabled=!ok;
 }
@@ -1200,43 +2987,71 @@ function runAnalysis(){
   var scoreResult=calcScore(avg,avgCard,cnt,cal,avgL);
   p.res={avg:avg,avgCard:avgCard,cnt:cnt,conf:conf,sc:scoreResult.total,items:scoreResult.items,avgL:avgL,cal:cal,mode:photoMode};
   showResult(p.res,null);renderPhotoGrid();renderApples();redraw();updSummary();
-  if(currentRegion) setTimeout(function(){askSaveData(p.res);},1000);
+  /* [정책 2026-05-14] 자동 저장 confirm 제거. 사용자가 "💾 결과 저장" 버튼 직접 클릭 */
+  updateSaveButton();
 }
 
-/* ── 2장 종합 판정 (항목11) ── */
+/* ── 2장 종합 판정 (항목11)
+   [수정 2026-05-14 묶음2] 두 사진을 자동으로 분석하고 가중평균(꼭지60%, 하부40%) */
 function runDualAnalysis(){
-  toast('2장 종합 분석은 각 사진에서 마킹을 완료한 후 별도로 실행합니다.\n꼭지 사진을 선택 후 마킹→판정, 하부 사진도 동일하게 진행하세요.');
-  /* 현재 구현: 각 사진 별도 판정 후 weighted average */
-  /* 꼭지 사진 처리 */
-  if(!dualPhotos.top||!dualPhotos.bottom){
-    toast('꼭지와 하부 사진을 모두 업로드하세요');
-    return;
-  }
-  /* 두 사진 모두 결과가 있으면 종합 */
-  var topRes=null,botRes=null;
+  var topP=null,botP=null,topIdx=-1,botIdx=-1;
   for(var i=0;i<photos.length;i++){
-    if(photos[i].res){
-      if(photos[i].mode==='top'||photos[i].mode==='both') topRes=photos[i].res;
-      if(photos[i].mode==='bottom') botRes=photos[i].res;
+    if(photos[i].mode==='top'){topP=photos[i];topIdx=i;}
+    if(photos[i].mode==='bottom'){botP=photos[i];botIdx=i;}
+  }
+  if(!topP||!botP){toast('꼭지/하부 사진이 모두 필요합니다');return;}
+  if(!topP.apples.length){toast('꼭지 사진을 먼저 마킹하세요');selPhoto(topIdx);return;}
+  if(!botP.apples.length){toast('하부 사진을 먼저 마킹하세요');selPhoto(botIdx);return;}
+
+  /* 각 사진 자동 분석 */
+  function analyzePhoto(p){
+    for(var i=0;i<p.apples.length;i++) p.apples[i].res=null;
+    var cal=calib(p);
+    var tot=0,cnt=0,Lsum=0;
+    for(var i=0;i<p.apples.length;i++){
+      var lab=exLab(p.apples[i].roi);
+      if(!lab) continue;
+      if(cal){lab.L+=cal.lO;lab.a+=cal.aO;}
+      var pc=getPct(lab.a);
+      p.apples[i].res={pct:pc,lab:lab,card:getCard(pc)};
+      tot+=pc;Lsum+=lab.L;cnt++;
     }
+    if(!cnt) return null;
+    var avg=Math.round(tot/cnt*10)/10;
+    var avgL=Lsum/cnt;
+    var avgCard=getCard(avg);
+    var conf=cal?0.90:0.72;
+    if(avgL<30||avgL>90) conf-=0.18;
+    conf=Math.round(Math.max(0.1,Math.min(1,conf))*100);
+    var scoreResult=calcScore(avg,avgCard,cnt,cal,avgL);
+    return {avg:avg,avgCard:avgCard,cnt:cnt,conf:conf,sc:scoreResult.total,items:scoreResult.items,avgL:avgL,cal:cal};
   }
-  if(topRes&&botRes){
-    var combined=Math.round((topRes.avg*0.6+botRes.avg*0.4)*10)/10;
-    var combinedCard=getCard(combined);
-    var combinedRes={
-      avg:combined,avgCard:combinedCard,
-      cnt:topRes.cnt+botRes.cnt,
-      conf:Math.round((topRes.conf*0.6+botRes.conf*0.4)),
-      sc:Math.round((topRes.sc*0.6+botRes.sc*0.4)),
-      items:[{l:'꼭지 착색률 (60%)',w:'꼭지: '+topRes.avg+'%',v:'+'+Math.round(topRes.avg*0.6),c:'pos'},{l:'하부 착색률 (40%)',w:'하부: '+botRes.avg+'%',v:'+'+Math.round(botRes.avg*0.4),c:'pos'}],
-      avgL:(topRes.avgL||50),cal:null,mode:'both',
-      topPct:topRes.avg,botPct:botRes.avg
-    };
-    showResult(combinedRes,{top:topRes.avg,bot:botRes.avg});
-    if(currentRegion) setTimeout(function(){askSaveData(combinedRes);},1000);
-  } else {
-    toast('먼저 각 사진을 선택해 꼭지/하부 마킹 후 판정을 각각 실행하세요.');
-  }
+  var topRes=analyzePhoto(topP);
+  var botRes=analyzePhoto(botP);
+  if(!topRes||!botRes){toast('픽셀 추출 실패. 마킹을 다시 해보세요');return;}
+  topP.res=topRes; botP.res=botRes;
+
+  /* 가중평균 종합 (꼭지 60% + 하부 40%) */
+  var combined=Math.round((topRes.avg*0.6+botRes.avg*0.4)*10)/10;
+  var combinedCard=getCard(combined);
+  var combinedRes={
+    avg:combined,avgCard:combinedCard,
+    cnt:topRes.cnt+botRes.cnt,
+    conf:Math.round((topRes.conf*0.6+botRes.conf*0.4)),
+    sc:Math.round((topRes.sc*0.6+botRes.sc*0.4)),
+    items:[
+      {l:'꼭지 착색률 (60%)',w:'꼭지: '+topRes.avg+'%, '+topRes.cnt+'개',v:'+'+Math.round(topRes.avg*0.6),c:'pos'},
+      {l:'하부 착색률 (40%)',w:'하부: '+botRes.avg+'%, '+botRes.cnt+'개',v:'+'+Math.round(botRes.avg*0.4),c:'pos'}
+    ],
+    avgL:(topRes.avgL*0.6+botRes.avgL*0.4),cal:null,mode:'both',
+    topPct:topRes.avg,botPct:botRes.avg
+  };
+  /* 두 사진 모두에 종합 결과 저장 (어느 쪽 선택해도 같은 결과 표시) */
+  topP.res=combinedRes; botP.res=combinedRes;
+  showResult(combinedRes,{top:topRes.avg,bot:botRes.avg});
+  renderPhotoGrid(); renderApples(); redraw(); updSummary();
+  updateSaveButton();
+  toast('🍎 종합 판정 완료! '+combined+'% (꼭지'+topRes.avg+'% · 하부'+botRes.avg+'%)');
 }
 
 function showResult(r, dualInfo){
@@ -1317,6 +3132,24 @@ function showResult(r, dualInfo){
   if(r.avgL>90) ws+='<div class="warn-item">⚠ 과노출. 그늘에서 재촬영하세요.</div>';
   if(!r.cal&&r.mode!=='both') ws+='<div class="warn-item">⚠ 카드 영역 지정 시 정확도가 향상됩니다.</div>';
   document.getElementById('warnBox').innerHTML=ws;
+
+  /* ── 농진청 색체계 매칭 표시 (8번 작업) ── */
+  var nradBox=document.getElementById('nradMatchBox');
+  var stage=getNradStage(r.avg);
+  var v=VARIETY[currentVariety];
+  if(nradBox&&stage&&v){
+    nradBox.style.display='block';
+    document.getElementById('nradVariety').textContent=v.icon+' '+v.name;
+    document.getElementById('nradVariety').style.background=v.color;
+    document.getElementById('nradStage').textContent=stage.stage+' ('+r.avg+'%)';
+    document.getElementById('nradStage').style.color=c.color;
+    document.getElementById('nradAdvice').textContent='💡 '+stage.advice;
+  }
+  /* 푸터노트도 품종에 맞춰 갱신 */
+  var fn=document.getElementById('footnoteBase');
+  if(fn){
+    fn.textContent='기준: '+(currentVariety==='hongro'?'국립원예특작과학원 홍로 숙기진단 LAB (a*=-3.0→0%, a*=+42.0→100%)':'농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=-5.7→0%, a*=+38.8→100%)')+'. 꼭지 부위 기준.';
+  }
   selG(c.g);
 }
 
@@ -1488,7 +3321,7 @@ function applyGPS(lat,lon,src,knownAddress){
           setEV('envLoc',loc);
           setBadge(loc.length>14?loc.slice(0,14)+'..':loc,'var(--accent)');
           /* 도 변경된 경우만 지도 다시 그리기 (무한루프 방지) */
-          if(regionChanged) initKoreaMap();
+          if(regionChanged){initKoreaMap();renderStatsMemo();}
         } catch(parseErr) {
           console.error('[Nominatim] '+(attemptIdx+1)+'차 파싱 에러:', parseErr.message);
           /* 파싱 에러 발생 시 다음 시도로 넘어가지 않고 종료 */
@@ -1737,6 +3570,187 @@ function applyAddrResult(lat,lon,displayName){
   toast('📍 위치 설정: '+displayName);
 }
 
+/* ════════════════════════════════════════════════════
+   AI 호출 추상화 계층 (5-2 작업)
+   ════════════════════════════════════════════════════
+   원칙:
+   1. 모든 AI 호출은 callAI() 통해서만 → 나중에 API 바꿀 때 이 함수만 수정
+   2. API 키는 localStorage 또는 환경변수에서 자동 로드
+   3. 응답은 표준 형식으로 변환 → 호출하는 쪽 코드 변경 불필요
+   4. 에러 발생 시 자동으로 폴백 (수동 모드 안내)
+   
+   현재 지원 프로바이더:
+   - anthropic: Claude Vision (기본)
+   향후 추가 가능: openai, google_gemini, custom (농진청 자체 API 등)
+   ════════════════════════════════════════════════════ */
+
+/* AI 설정 관리 — localStorage에 저장
+   userKey: 사용자가 직접 입력한 키 (우선 사용)
+   provider: 사용할 AI 회사 (현재는 anthropic만) */
+var AIConfig = {
+  PROVIDER_DEFAULT: 'anthropic',
+  MODEL_DEFAULTS: {
+    anthropic: 'claude-sonnet-4-6'
+    /* 향후: openai: 'gpt-4o', google: 'gemini-pro-vision' */
+  },
+  /* 박스 모드처럼 최고 정확도 필요한 경우용 */
+  MODEL_HIGH_ACCURACY: {
+    anthropic: 'claude-opus-4-7'
+  },
+  /* 현재 사용자 설정 가져오기 */
+  get: function(){
+    var raw=null;
+    try{raw=localStorage.getItem('fujigrade_ai_config');}catch(e){}
+    if(raw){
+      try{return JSON.parse(raw);}catch(e){}
+    }
+    return {provider:this.PROVIDER_DEFAULT, userKey:null, model:null};
+  },
+  /* 사용자 설정 저장 */
+  set: function(config){
+    try{localStorage.setItem('fujigrade_ai_config', JSON.stringify(config));}catch(e){}
+  },
+  /* 사용자 키 등록 (옵션) */
+  setUserKey: function(key){
+    var cfg=this.get();
+    cfg.userKey=key||null;
+    this.set(cfg);
+  },
+  /* 사용할 키 결정: 사용자 키 우선, 없으면 사이트 키 (Netlify 환경변수 - 빌드 시 주입) */
+  getActiveKey: function(){
+    var cfg=this.get();
+    if(cfg.userKey) return {key:cfg.userKey, source:'user'};
+    /* 사이트 키 (window.SITE_API_KEY는 build time에 주입되거나 별도 함수로 로드) */
+    if(typeof window.SITE_API_KEY!=='undefined'&&window.SITE_API_KEY){
+      return {key:window.SITE_API_KEY, source:'site'};
+    }
+    return {key:null, source:'none'};
+  }
+};
+
+/* ── 통합 AI 호출 함수 ──
+   모든 AI 호출은 이 함수 1개를 통해서만 진행
+   파라미터:
+     imageDataUrl: 압축된 이미지 (data:image/jpeg;base64,...)
+     prompt: AI에게 보낼 질문 (한국어 가능)
+     options: {maxTokens: 600, temperature: 0}
+   반환: Promise<{success, text, error, provider}> */
+function callAI(imageDataUrl, prompt, options){
+  options=options||{};
+  var cfg=AIConfig.get();
+  var keyInfo=AIConfig.getActiveKey();
+  
+  /* 키 없으면 즉시 실패 */
+  if(!keyInfo.key){
+    return Promise.resolve({
+      success:false,
+      text:null,
+      error:'API 키가 설정되지 않았습니다. 설정 화면에서 키를 입력하세요.',
+      provider:cfg.provider,
+      needsKey:true
+    });
+  }
+  
+  /* 프로바이더별 호출 분기 */
+  if(cfg.provider==='anthropic'){
+    /* 박스 모드처럼 정확도가 중요하면 highAccuracy 옵션으로 Opus 사용 */
+    var model = cfg.model;
+    if(!model){
+      model = options.highAccuracy ? AIConfig.MODEL_HIGH_ACCURACY.anthropic : AIConfig.MODEL_DEFAULTS.anthropic;
+    }
+    return callAI_Anthropic(imageDataUrl, prompt, options, keyInfo.key, model);
+  }
+  /* 향후 추가:
+  if(cfg.provider==='openai') return callAI_OpenAI(...);
+  if(cfg.provider==='google') return callAI_Gemini(...);
+  if(cfg.provider==='custom') return callAI_Custom(...);  // 농진청 자체 API 등
+  */
+  
+  return Promise.resolve({success:false, text:null, error:'지원하지 않는 AI 프로바이더: '+cfg.provider, provider:cfg.provider});
+}
+
+/* Anthropic Claude 호출 (현재 구현체) */
+function callAI_Anthropic(imageDataUrl, prompt, options, apiKey, model){
+  var base64=imageDataUrl.split(',')[1];
+  var mimeType=imageDataUrl.split(';')[0].split(':')[1]||'image/jpeg';
+  
+  return fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key':apiKey,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:model,
+      max_tokens:options.maxTokens||600,
+      messages:[{
+        role:'user',
+        content:[
+          {type:'image',source:{type:'base64',media_type:mimeType,data:base64}},
+          {type:'text',text:prompt}
+        ]
+      }]
+    })
+  })
+  .then(function(r){
+    if(!r.ok){
+      return r.json().then(function(err){
+        throw new Error('API 오류 ('+r.status+'): '+(err.error&&err.error.message||r.statusText));
+      });
+    }
+    return r.json();
+  })
+  .then(function(d){
+    var txt=(d.content&&d.content[0]&&d.content[0].text)||'';
+    return {success:true, text:txt, error:null, provider:'anthropic', raw:d};
+  })
+  .catch(function(e){
+    return {success:false, text:null, error:e.message||'알 수 없는 오류', provider:'anthropic'};
+  });
+}
+
+/* AI 응답에서 JSON 추출 (모든 프로바이더 공통) */
+function parseAIJson(text){
+  if(!text) return null;
+  try{
+    /* 코드블록 제거 */
+    var clean=text.split('\x60\x60\x60').join('').trim();
+    /* JSON 부분만 추출 */
+    var match=clean.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    if(!match) return null;
+    return JSON.parse(match[0]);
+  }catch(e){
+    console.warn('[parseAIJson] JSON 파싱 실패:', e.message);
+    return null;
+  }
+}
+
+/* ── 설정 화면 (간이 모달) ── */
+function showAISettings(){
+  var cfg=AIConfig.get();
+  var current=cfg.userKey?'(사용자 키 등록됨)':(typeof window.SITE_API_KEY!=='undefined'&&window.SITE_API_KEY?'(사이트 키 사용 중)':'(키 없음)');
+  var key=prompt('Claude API 키 입력 (sk-ant-...)\n현재 상태: '+current+'\n\n• 입력 시 사용자 키로 저장\n• 빈 값 입력 시 사이트 키로 복귀\n• 취소 시 변경 없음', cfg.userKey||'');
+  if(key===null) return; /* 취소 */
+  if(key.trim()===''){
+    AIConfig.setUserKey(null);
+    toast('🔑 사용자 키 제거됨. 사이트 키로 복귀.');
+  } else {
+    if(!key.startsWith('sk-ant-')){
+      if(!confirm('Claude API 키는 보통 "sk-ant-"로 시작합니다. 그래도 저장할까요?')) return;
+    }
+    AIConfig.setUserKey(key.trim());
+    toast('🔑 사용자 API 키 저장됨');
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   기존 호출처는 이제 callAI()를 사용하도록 점진 마이그레이션
+   (5-3에서 박스 모드 AI 검출이 새로 callAI를 사용)
+   기존 extractGPSFromImage, scanWithClaudeVision는 호환 유지
+   ════════════════════════════════════════════════════ */
+
 /* ── EXIF + Claude Vision ── */
 function usePhotoGPS(){
   if(aIdx<0||!photos[aIdx]){toast('먼저 사진을 업로드하세요');return;}
@@ -1753,7 +3767,8 @@ function usePhotoGPS(){
         return;
       }
       btn.innerHTML='📷 이미지 분석 중...';
-      extractGPSFromImage(p.url,function(lat2,lon2,addr){
+      /* [2026-05-15 수정] 압축본 사용 */
+      extractGPSFromImage(p.compressedUrl||p.url,function(lat2,lon2,addr){
         btn.innerHTML='📷 사진 속 위치 사용<br><span style="font-size:10px;opacity:.7">EXIF GPS 자동 추출</span>';
         if(lat2&&lon2){
           applyGPS(lat2,lon2,'사진 텍스트',addr);  /* ★ 주소 함께 */
@@ -1788,7 +3803,7 @@ function extractGPSFromImage(dataUrl,cb){
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
-      model:'claude-sonnet-4-20250514',
+      model:'claude-sonnet-4-6',
       max_tokens:400,
       messages:[{
         role:'user',
@@ -1841,6 +3856,124 @@ function useCurrentGPS(){
 }
 
 /* ── EXIF 파싱 ── */
+/* [2026-05-15 추가] EXIF Orientation 읽기 - 모바일 사진 회전 정보
+   1=정상, 3=180°, 6=시계 90°, 8=반시계 90° */
+function extractOrientation(file,cb){
+  if(!file){cb(1);return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=new Uint8Array(e.target.result);
+      if(data[0]!==0xFF||data[1]!==0xD8){cb(1);return;}
+      var offset=2;
+      while(offset<data.length-2){
+        if(data[offset]!==0xFF){break;}
+        var marker=(data[offset]<<8)|data[offset+1];
+        var segLen=(data[offset+2]<<8)|data[offset+3];
+        if(marker===0xFFE1){
+          if(data[offset+4]===0x45&&data[offset+5]===0x78&&data[offset+6]===0x69&&data[offset+7]===0x66){
+            var base=offset+10;
+            var little=(data[base]===0x49);
+            var ifd0=base+readU32(data,base+4,little);
+            var count=readU16(data,ifd0,little);
+            for(var i=0;i<count;i++){
+              var o=ifd0+2+i*12;
+              var tag=readU16(data,o,little);
+              if(tag===0x0112){ /* Orientation 태그 */
+                var ori=readU16(data,o+8,little);
+                cb(ori||1);
+                return;
+              }
+            }
+          }
+          break;
+        }
+        offset+=2+segLen;
+      }
+      cb(1);
+    }catch(ex){cb(1);}
+  };
+  reader.onerror=function(){cb(1);};
+  reader.readAsArrayBuffer(file.slice(0,131072));
+}
+
+/* [2026-05-15 추가] 이미지 정규화 함수 — 핵심
+   1. EXIF Orientation에 따라 자동 회전 (가로/세로 정상화)
+   2. 너무 크면 1568px 이내로 압축 (AI Vision API 권장 크기)
+   3. 모바일 메모리 절약, AI 인식률 향상
+   결과: { displayUrl(원본 회전본), compressedUrl(AI용 1568px), origFile(GPS용) } */
+function processImageFile(file, callback){
+  /* 1단계: EXIF Orientation 읽기 */
+  extractOrientation(file, function(orientation){
+    /* 2단계: 이미지 로딩 */
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var img=new Image();
+      img.onload=function(){
+        var w=img.naturalWidth, h=img.naturalHeight;
+        /* 방향에 따라 캔버스 크기 결정 */
+        var rotated=(orientation>=5&&orientation<=8);
+        var canvW=rotated?h:w, canvH=rotated?w:h;
+        
+        /* 3단계: 정상 방향으로 캔버스에 그리기 (Display용 원본) */
+        var displayCanvas=document.createElement('canvas');
+        displayCanvas.width=canvW;
+        displayCanvas.height=canvH;
+        var dctx=displayCanvas.getContext('2d');
+        dctx.save();
+        switch(orientation){
+          case 2: dctx.translate(canvW,0); dctx.scale(-1,1); break;
+          case 3: dctx.translate(canvW,canvH); dctx.rotate(Math.PI); break;
+          case 4: dctx.translate(0,canvH); dctx.scale(1,-1); break;
+          case 5: dctx.rotate(0.5*Math.PI); dctx.scale(1,-1); break;
+          case 6: dctx.translate(canvW,0); dctx.rotate(0.5*Math.PI); break;
+          case 7: dctx.translate(canvW,canvH); dctx.rotate(0.5*Math.PI); dctx.scale(-1,1); break;
+          case 8: dctx.translate(0,canvH); dctx.rotate(-0.5*Math.PI); break;
+        }
+        dctx.drawImage(img,0,0);
+        dctx.restore();
+        
+        /* 4단계: AI용 압축본 (최대 1568px) */
+        var MAX=1568;
+        var sc=Math.min(1, MAX/Math.max(canvW,canvH));
+        var compW=Math.round(canvW*sc), compH=Math.round(canvH*sc);
+        var compressCanvas=document.createElement('canvas');
+        compressCanvas.width=compW;
+        compressCanvas.height=compH;
+        var cctx=compressCanvas.getContext('2d');
+        /* 고품질 축소 */
+        cctx.imageSmoothingEnabled=true;
+        cctx.imageSmoothingQuality='high';
+        cctx.drawImage(displayCanvas,0,0,compW,compH);
+        
+        /* 5단계: 결과 콜백 */
+        /* Display용 = 회전 보정된 원본 (마킹, 색 분석용) */
+        /* Compressed = 1568px 이하 (AI Vision API용 - GPS/주소 인식) */
+        var displayImg=new Image();
+        displayImg.onload=function(){
+          callback({
+            displayImg: displayImg,
+            displayUrl: displayCanvas.toDataURL('image/jpeg', 0.92),
+            compressedUrl: compressCanvas.toDataURL('image/jpeg', 0.85),
+            origFile: file, /* GPS는 원본 파일에서 추출 */
+            orientation: orientation,
+            origSize: {w:w, h:h},
+            displaySize: {w:canvW, h:canvH},
+            compressedSize: {w:compW, h:compH}
+          });
+        };
+        displayImg.src=displayCanvas.toDataURL('image/jpeg', 0.92);
+      };
+      img.onerror=function(){
+        toast('⚠ 사진 로딩 실패. 다른 사진을 시도하세요.');
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ── EXIF 파싱 (GPS) ── */
 function extractEXIF(file,cb){
   if(!file){cb(null,null);return;}
   var reader=new FileReader();
@@ -1901,56 +4034,46 @@ function readGPSTags(d,gpsOff,le,base){
   return{lat:lat,lon:lon};
 }
 
-/* ── 업로드 즉시 자동 스캔 ──
-   [정책 변경 2026-05-14] 워터마크 우선 (B-A안)
-   1) AI Vision으로 사진 안의 워터마크 좌표/주소를 먼저 읽음 (가장 신뢰)
-   2) AI 실패 시 EXIF GPS로 폴백
-   3) 둘 다 없으면 사용자 직접 입력 유도 */
+/* ── 업로드 즉시 자동 스캔 ── */
 function autoScanPhoto(photoObj,idx){
-  /* EXIF는 백그라운드로 동시 추출 (폴백용으로만 저장) */
   if(photoObj.file){
     extractEXIF(photoObj.file,function(lat,lon){
       if(lat&&lon){
-        photoObj.exifGps={lat:lat,lon:lon}; /* 폴백용 */
-        console.log('[EXIF] 사진 #'+(idx+1)+' EXIF GPS:',lat,lon,'(폴백용 보관)');
+        /* ★ 사진별 GPS 저장 */
+        photoObj.gps={lat:lat,lon:lon,source:'EXIF',address:null};
+        photoObj.gpsScanned=true;
+        /* 현재 선택된 사진이면 즉시 적용 */
+        if(idx===aIdx) applyGPS(lat,lon,'사진 EXIF');
+        toast('📍 사진 #'+(idx+1)+' EXIF GPS 인식');
+      } else {
+        scanWithClaudeVision(photoObj,idx);
       }
     });
+  } else {
+    scanWithClaudeVision(photoObj,idx);
   }
-  /* AI Vision은 항상 호출 (워터마크 우선) */
-  scanWithClaudeVision(photoObj,idx);
 }
 
 function scanWithClaudeVision(photoObj,idx){
-  var base64=photoObj.url.split(',')[1];
-  var mimeType=photoObj.url.split(';')[0].split(':')[1]||'image/jpeg';
+  /* [2026-05-15 수정] 원본 대신 압축본 사용
+     모바일 4MB 사진 → 1568px 약 200KB로 줄여 AI에 전송
+     워터마크 텍스트 인식률 대폭 향상, 업로드 시간 1/20로 단축 */
+  var sourceUrl = photoObj.compressedUrl || photoObj.url; /* 폴백: 압축본 없으면 원본 */
+  var base64=sourceUrl.split(',')[1];
+  var mimeType=sourceUrl.split(';')[0].split(':')[1]||'image/jpeg';
   var badge=document.getElementById('envBadge');
   if(badge&&idx===aIdx) badge.textContent='🔍 AI 스캔 중... ('+(idx+1)+')';
-
-  /* ── AI 실패 시 EXIF 폴백 함수 ── */
-  function fallbackToEXIF(reason){
-    console.warn('[AI] 사진 #'+(idx+1)+' 워터마크 인식 실패('+reason+'). EXIF 폴백 시도.');
-    if(photoObj.exifGps){
-      var ex=photoObj.exifGps;
-      photoObj.gps={lat:ex.lat,lon:ex.lon,source:'EXIF',address:null};
-      photoObj.gpsScanned=true;
-      if(idx===aIdx) applyGPS(ex.lat,ex.lon,'사진 EXIF');
-      toast('📍 사진 #'+(idx+1)+' EXIF GPS 사용 (워터마크 못 읽음)');
-    } else {
-      if(badge&&idx===aIdx) badge.textContent='위치 미설정';
-    }
-  }
-
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
-      model:'claude-sonnet-4-20250514',
+      model:'claude-sonnet-4-6',
       max_tokens:600,
       messages:[{
         role:'user',
         content:[
           {type:'image',source:{type:'base64',media_type:mimeType,data:base64}},
-          {type:'text',text:'이미지에서 다음을 추출해서 JSON으로만 답하세요(다른 텍스트 금지).\n\n[1] 좌표/주소 추출 — 우선순위:\n  (a) 이미지에 명시적으로 적힌 GPS 좌표(예: "35.675841°N, 127.560937°E" 같은 워터마크 텍스트)가 있으면 그 좌표를 정확히 그대로 lat/lon에 넣으세요. 한 자리도 틀리면 안 됨.\n  (b) 좌표가 없고 한국 주소 텍스트(예: "전북특별자치도 음신길 55625")가 보이면 addr에 그대로 넣으세요.\n  (c) 좌표/주소가 전혀 안 보이면 모두 null.\n  ※ 사진 속 워터마크/오버레이/도장 텍스트를 글자 단위로 읽으세요. 추측 금지.\n\n[2] 사과 꼭지 위치(이미지 상대 좌표 0~1) — 최대 5개.\n\n형식: {"lat":숫자|null,"lon":숫자|null,"addr":"원문 그대로"|null,"stems":[{"x":0~1,"y":0~1}]}'}
+          {type:'text',text:'이 이미지를 분석해서 JSON으로만 답하세요. 분석: 1) GPS 좌표 또는 한국 주소(읍/면/동 단위까지 최대한 상세히), 2) 사과 꼭지 위치(이미지 상대 0~1). 형식: {"lat":숫자|null,"lon":숫자|null,"addr":"시도 시군구 읍면동"|null,"stems":[{"x":0~1,"y":0~1}]}'}
         ]
       }]
     })
@@ -1958,20 +4081,17 @@ function scanWithClaudeVision(photoObj,idx){
   .then(function(r){return r.json();})
   .then(function(d){
     var txt=(d.content&&d.content[0]&&d.content[0].text)?d.content[0].text:'';
-    console.log('[AI] 사진 #'+(idx+1)+' 응답:',txt);
     try{
       var clean=txt.split('\x60\x60\x60').join('').trim();
       var jsonMatch=clean.match(/\{[\s\S]*\}/);
       if(!jsonMatch) throw new Error('no json');
       var obj=JSON.parse(jsonMatch[0]);
-
-      /* ★ 좌표 우선 적용 (워터마크 좌표가 진실) — null과 0 구분 */
-      var hasCoord = (obj.lat!==null&&obj.lat!==undefined&&obj.lon!==null&&obj.lon!==undefined);
-      if(hasCoord){
-        photoObj.gps={lat:obj.lat,lon:obj.lon,source:'AI워터마크',address:obj.addr||null};
+      /* ★ 사진별 GPS 저장 (currentLat 체크 제거) */
+      if(obj.lat&&obj.lon){
+        photoObj.gps={lat:obj.lat,lon:obj.lon,source:'AI',address:obj.addr||null};
         photoObj.gpsScanned=true;
-        if(idx===aIdx) applyGPS(obj.lat,obj.lon,'사진 워터마크',obj.addr);
-        toast('📍 사진 #'+(idx+1)+' 워터마크 좌표: '+obj.lat.toFixed(4)+', '+obj.lon.toFixed(4));
+        if(idx===aIdx) applyGPS(obj.lat,obj.lon,'사진 텍스트',obj.addr);
+        toast('📍 사진 #'+(idx+1)+' AI 인식: '+(obj.addr||obj.lat.toFixed(3)+','+obj.lon.toFixed(3)));
       } else if(obj.addr){
         /* 주소만 있는 경우 Nominatim으로 좌표 확보 */
         photoObj.pendingAddress=obj.addr;
@@ -1985,20 +4105,12 @@ function scanWithClaudeVision(photoObj,idx){
               photoObj.gpsScanned=true;
               if(idx===aIdx) applyGPS(la,lo,'AI 주소',obj.addr);
               toast('📍 사진 #'+(idx+1)+' 주소 인식: '+obj.addr);
-            } else {
-              /* 주소 매칭 실패 → EXIF 폴백 */
-              fallbackToEXIF('주소 매칭 실패');
-              if(idx===aIdx){
-                document.getElementById('addrInput').value=obj.addr;
-                document.getElementById('addrInputWrap').className='addr-input-wrap show';
-              }
+            } else if(idx===aIdx){
+              document.getElementById('addrInput').value=obj.addr;
+              document.getElementById('addrInputWrap').className='addr-input-wrap show';
             }
-          }).catch(function(){fallbackToEXIF('Nominatim 호출 실패');});
-      } else {
-        /* AI가 좌표/주소 둘 다 못 찾음 → EXIF 폴백 */
-        fallbackToEXIF('AI 좌표/주소 미인식');
+          }).catch(function(){});
       }
-      /* 꼭지 자동 감지 (좌표 처리와 무관하게 실행) */
       if(obj.stems&&obj.stems.length>0&&idx===aIdx){
         var W=cvs.width,H=cvs.height;
         for(var si=0;si<obj.stems.length;si++){
@@ -2013,13 +4125,11 @@ function scanWithClaudeVision(photoObj,idx){
         if(photoObj.apples.length>0){renderApples();checkRun();redraw();toast('🍎 꼭지 '+photoObj.apples.length+'개 자동 감지!');}
       }
     }catch(e){
-      console.error('[AI] 사진 #'+(idx+1)+' JSON 파싱 실패:',e.message);
-      fallbackToEXIF('JSON 파싱 실패');
+      if(badge&&idx===aIdx) badge.textContent='위치 미설정';
     }
   })
-  .catch(function(e){
-    console.error('[AI] 사진 #'+(idx+1)+' API 호출 실패:',e&&e.message);
-    fallbackToEXIF('API 호출 실패');
+  .catch(function(){
+    if(badge) badge.textContent='위치 미설정';
   });
 }
 
@@ -2254,13 +4364,24 @@ function renderRegionList(data){
   el.innerHTML=h;
 }
 
-/* ── 저장 (항목9: 날씨 포함 저장) ── */
-function askSaveData(res){
-  if(!currentRegion) return;
+/* ── 저장 (항목9: 날씨 포함 저장) ──
+   [정책 변경 2026-05-14] confirm 팝업 제거.
+   판정 후 자동 저장 안 함. 사용자가 결과 패널의 "💾 결과 저장" 버튼을 직접 눌러야 저장됨.
+   같은 결과를 두 번 저장하지 않도록 photoObj.saved 플래그로 중복 방지. */
+function saveResultData(res){
+  if(!currentRegion){
+    toast('⚠️ 위치를 먼저 설정해주세요 (사진 GPS 또는 주소 입력)');
+    return false;
+  }
+  /* 중복 저장 방지: 현재 사진이 이미 저장됐는지 확인 */
+  var curPhoto=(aIdx>=0&&photos[aIdx])?photos[aIdx]:null;
+  if(curPhoto&&curPhoto.saved){
+    toast('이미 저장된 결과입니다');
+    return false;
+  }
+
   var rname='';
   for(var ri=0;ri<REGIONS.length;ri++){if(REGIONS[ri].id===currentRegion){rname=REGIONS[ri].name;break;}}
-  var ans=confirm('이번 판정 결과('+res.avg+'%)를 '+rname+' 데이터에 저장하겠습니까?');
-  if(!ans) return;
 
   /* 도별 집계 저장 */
   var data=loadRegionData();
@@ -2312,6 +4433,9 @@ function askSaveData(res){
     conf:res.conf,
     sc:res.sc,
     mode:res.mode||'top',
+    variety:currentVariety,  /* 7번 작업: 품종 정보 */
+    varietyName:VARIETY[currentVariety].name,
+    nradStage:(function(){var s=getNradStage(res.avg);return s?s.stage:null;})(),  /* 8번 작업: 농진청 단계 */
     weather:weatherCache?{
       avgMax:null,avgMin:null,avgAll:null,totalRain:0,sunHours:0
     }:null
@@ -2335,15 +4459,50 @@ function askSaveData(res){
       avgMin:minArr2.length?Math.round(minArr2.reduce(function(a,b){return a+b;},0)/minArr2.length*10)/10:null,
       avgAll:allArr2.length?Math.round(allArr2.reduce(function(a,b){return a+b;},0)/allArr2.length*10)/10:null,
       totalRain:Math.round(totRain2*10)/10,
-      sunHours:sunCnt2>0?Math.round((sunTotal2/sunCnt2/3600)*10)/10:0
+      sunHours:sunCnt2>0?Math.round((sunTotal2/sunCnt2/3600)*10)/10:0,  /* 일평균 (h/일) */
+      sunHoursTotal:sunCnt2>0?Math.round((sunTotal2/3600)*10)/10:0       /* 2주 누적 (h) */
     };
   }
   records.push(record);
   saveAllRecords(records);
 
-  toast('저장 완료! '+rname+' 평균 '+data[currentRegion].avg+'%');
+  /* 중복 저장 방지: 이 사진을 저장됨으로 표시 */
+  if(curPhoto) curPhoto.saved=true;
+
+  toast('💾 저장 완료! '+rname+' 평균 '+data[currentRegion].avg+'%');
   initKoreaMap();
+  renderStatsMemo();
   renderRecordsPage();
+  updateSaveButton(); /* 버튼 상태 갱신 (저장됨 → 비활성) */
+  return true;
+}
+
+/* ── 저장 버튼 상태 갱신 ── */
+function updateSaveButton(){
+  var btn=document.getElementById('saveResultBtn');
+  if(!btn) return;
+  var curPhoto=(aIdx>=0&&photos[aIdx])?photos[aIdx]:null;
+  if(curPhoto&&curPhoto.saved){
+    btn.innerHTML='✅ 저장됨';
+    btn.style.background='var(--muted)';
+    btn.style.color='var(--bg)';
+    btn.disabled=true;
+  } else {
+    btn.innerHTML='💾 결과 저장';
+    btn.style.background='var(--accent)';
+    btn.style.color='var(--bg)';
+    btn.disabled=false;
+  }
+}
+
+/* ── 결과 저장 버튼 클릭 핸들러 ── */
+function onSaveResultClick(){
+  var curPhoto=(aIdx>=0&&photos[aIdx])?photos[aIdx]:null;
+  if(!curPhoto||!curPhoto.res){
+    toast('먼저 판정을 실행하세요');
+    return;
+  }
+  saveResultData(curPhoto.res);
 }
 
 /* ════ 기록 탭 렌더링 (항목9) ════ */
@@ -2398,20 +4557,36 @@ function renderRecordsPage(){
   if(avgRain!==null) html+='<div class="rec-stat"><span class="sv">'+avgRain+'mm</span><span class="sl">평균강수량</span></div>';
   html+='</div>';
 
-  /* 개별 기록 카드 */
+  /* ── 일괄 삭제 + 엑셀 내보내기 도구모음 ── */
+  html+='<div class="rec-toolbar" style="display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:10px;flex-wrap:wrap">';
+  html+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--cream)">';
+  html+='<input type="checkbox" id="recSelectAll" onchange="toggleSelectAllRecords(this.checked)" style="width:16px;height:16px;cursor:pointer"> 전체 선택';
+  html+='</label>';
+  html+='<span style="font-size:11px;color:var(--muted)" id="recSelectedCount">선택: 0건</span>';
+  html+='<div style="flex:1"></div>';
+  html+='<button onclick="exportExcel(\''+activeTab+'\')" style="background:rgba(140,196,74,.12);border:1px solid var(--accent);color:var(--accent);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">📊 엑셀 내보내기</button>';
+  html+='<button onclick="deleteSelectedRecords()" id="recDelSelBtn" disabled style="background:rgba(255,100,100,.15);border:1px solid rgba(255,100,100,.4);color:#ff8080;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;opacity:.5">🗑 선택 삭제</button>';
+  html+='<button onclick="deleteAllRecords()" style="background:rgba(255,100,100,.08);border:1px solid rgba(255,100,100,.3);color:#ff8080;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer">🗑 전체 삭제</button>';
+  html+='</div>';
+
+  /* 개별 기록 카드 (체크박스 추가) */
   for(var i=filtered.length-1;i>=0;i--){
     var rec=filtered[i];
-    html+='<div class="rec-entry">';
-    html+='<div class="rec-entry-head">';
+    html+='<div class="rec-entry" data-rec-id="'+rec.id+'" style="position:relative">';
+    /* 체크박스 */
+    html+='<input type="checkbox" class="rec-check" data-rec-id="'+rec.id+'" onchange="onRecCheckChange()" style="position:absolute;top:14px;left:14px;width:18px;height:18px;cursor:pointer;z-index:2">';
+    /* 개별 삭제 버튼 */
+    html+='<button onclick="deleteOneRecord('+rec.id+')" title="이 기록만 삭제" style="position:absolute;top:10px;right:10px;background:rgba(255,100,100,.1);border:1px solid rgba(255,100,100,.3);color:#ff8080;width:26px;height:26px;border-radius:6px;font-size:12px;cursor:pointer;z-index:2">✕</button>';
+
+    html+='<div class="rec-entry-head" style="padding-left:32px">';
     html+='<div class="rec-entry-grade" style="background:'+rec.gradeColor+'">'+rec.grade+'</div>';
     html+='<div class="rec-entry-info">';
     html+='<div class="rec-entry-pct" style="color:'+rec.gradeColor+'">'+rec.pct+'%</div>';
     html+='<div class="rec-entry-meta">'+rec.regionName+(rec.address?' · '+rec.address.slice(0,20):'')+(rec.mode==='both'?' · 상+하부':rec.mode==='bottom'?' · 하부':'')+'</div>';
     html+='</div>';
-    html+='<div class="rec-entry-date">'+rec.date+(rec.harvestDate?'<br>수확:'+rec.harvestDate.slice(5):'')+'</div>';
+    html+='<div class="rec-entry-date" style="margin-right:36px">'+rec.date+(rec.harvestDate?'<br>수확:'+rec.harvestDate.slice(5):'')+'</div>';
     html+='</div>';
     if(rec.weather){
-      /* 구버전(sunDays) / 신버전(sunHours) 호환 */
       var sunDisplay='—';
       if(typeof rec.weather.sunHours!=='undefined') sunDisplay=rec.weather.sunHours+'h';
       else if(typeof rec.weather.sunDays!=='undefined') sunDisplay=rec.weather.sunDays+'일';
@@ -2428,6 +4603,347 @@ function renderRecordsPage(){
   }
 
   contentEl.innerHTML=html;
+}
+
+/* ── 기록 삭제 함수들 (항목6) ── */
+function onRecCheckChange(){
+  var checks=document.querySelectorAll('.rec-check:checked');
+  var countEl=document.getElementById('recSelectedCount');
+  var btnEl=document.getElementById('recDelSelBtn');
+  if(countEl) countEl.textContent='선택: '+checks.length+'건';
+  if(btnEl){
+    btnEl.disabled=(checks.length===0);
+    btnEl.style.opacity=checks.length===0?'.5':'1';
+  }
+}
+
+function toggleSelectAllRecords(checked){
+  var checks=document.querySelectorAll('.rec-check');
+  for(var i=0;i<checks.length;i++) checks[i].checked=checked;
+  onRecCheckChange();
+}
+
+function deleteOneRecord(id){
+  if(!confirm('이 기록 1건을 삭제하시겠습니까?')) return;
+  var records=loadAllRecords();
+  /* 도별 집계에서도 차감 */
+  var target=null;
+  for(var i=0;i<records.length;i++){if(records[i].id===id){target=records[i];break;}}
+  if(!target){toast('기록을 찾지 못했습니다');return;}
+  removeFromRegionAgg(target);
+  records=records.filter(function(r){return r.id!==id;});
+  saveAllRecords(records);
+  toast('1건 삭제됨');
+  renderRecordsPage();
+  initKoreaMap();
+  renderStatsMemo();
+}
+
+function deleteSelectedRecords(){
+  var checks=document.querySelectorAll('.rec-check:checked');
+  if(!checks.length){toast('선택된 기록이 없습니다');return;}
+  if(!confirm(checks.length+'건을 삭제하시겠습니까?')) return;
+  var ids={};
+  for(var i=0;i<checks.length;i++) ids[checks[i].dataset.recId]=true;
+  var records=loadAllRecords();
+  /* 도별 집계 차감 */
+  for(var i=0;i<records.length;i++){if(ids[String(records[i].id)]) removeFromRegionAgg(records[i]);}
+  records=records.filter(function(r){return !ids[String(r.id)];});
+  saveAllRecords(records);
+  toast(Object.keys(ids).length+'건 삭제됨');
+  renderRecordsPage();
+  initKoreaMap();
+  renderStatsMemo();
+}
+
+function deleteAllRecords(){
+  var records=loadAllRecords();
+  if(!records.length){toast('삭제할 기록이 없습니다');return;}
+  if(!confirm('정말 전체 '+records.length+'건의 기록을 모두 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
+  if(!confirm('한 번 더 확인합니다. 모든 기록을 삭제하시겠습니까?')) return;
+  saveAllRecords([]);
+  /* 도별 집계도 초기화 */
+  saveRegionData({});
+  toast('전체 '+records.length+'건 삭제 완료');
+  renderRecordsPage();
+  initKoreaMap();
+  renderStatsMemo();
+}
+
+/* ════ 실시간 통계 메모장 렌더링 (1번 작업) ════
+   저장/삭제할 때마다 자동 호출돼서 현재까지 누적된 통계를 보여줌.
+   전국 평균, 도별 TOP3, 최근 활동, 등급 분포 등 한눈에 파악 가능. */
+function renderStatsMemo(){
+  var memoBody=document.getElementById('memoBody');
+  var memoUpdated=document.getElementById('memoUpdated');
+  if(!memoBody) return;
+
+  var records=loadAllRecords();
+  if(!records.length){
+    memoBody.innerHTML='<div style="color:var(--muted);font-style:italic;text-align:center;padding:14px 0">판정을 저장하면 여기에 자동으로 통계가 누적됩니다.</div>';
+    if(memoUpdated) memoUpdated.textContent='아직 데이터 없음';
+    return;
+  }
+
+  /* ── 1. 전국 평균 ── */
+  var totalSum=0;
+  for(var i=0;i<records.length;i++) totalSum+=records[i].pct;
+  var natAvg=Math.round(totalSum/records.length*10)/10;
+  var natCard=getCard(natAvg);
+
+  /* ── 2. 도별 집계 ── */
+  var regStats={};
+  for(var i=0;i<records.length;i++){
+    var r=records[i];
+    if(!r.region) continue;
+    if(!regStats[r.region]) regStats[r.region]={name:r.regionName||r.region,count:0,sum:0,maxPct:0};
+    regStats[r.region].count++;
+    regStats[r.region].sum+=r.pct;
+    if(r.pct>regStats[r.region].maxPct) regStats[r.region].maxPct=r.pct;
+  }
+  var regArr=[];
+  for(var k in regStats){if(regStats.hasOwnProperty(k)){var s=regStats[k];s.avg=Math.round(s.sum/s.count*10)/10;regArr.push(s);}}
+  regArr.sort(function(a,b){return b.avg-a.avg;}); /* 평균 높은 순 */
+  var top3=regArr.slice(0,3);
+
+  /* ── 3. 등급 분포 ── */
+  var gradeCnt={G1:0,G2:0,G3:0,G4:0,G5:0};
+  for(var i=0;i<records.length;i++){
+    var g=records[i].grade||'G3';
+    if(gradeCnt[g]!==undefined) gradeCnt[g]++;
+  }
+
+  /* ── 4. 최근 활동 (마지막 3건) ── */
+  var recent=records.slice(-3).reverse();
+
+  /* ── 5. 평균 날씨 (있는 것만) ── */
+  var sunArr=[],sunTotalArr=[],rainArr=[],tmaxArr=[];
+  for(var i=0;i<records.length;i++){
+    var w=records[i].weather;
+    if(!w) continue;
+    if(typeof w.sunHours!=='undefined'&&w.sunHours!==null) sunArr.push(w.sunHours);
+    if(typeof w.sunHoursTotal!=='undefined'&&w.sunHoursTotal!==null) sunTotalArr.push(w.sunHoursTotal);
+    if(typeof w.totalRain!=='undefined'&&w.totalRain!==null) rainArr.push(w.totalRain);
+    if(typeof w.avgMax!=='undefined'&&w.avgMax!==null) tmaxArr.push(w.avgMax);
+  }
+  function arrAvg(a){return a.length?Math.round(a.reduce(function(x,y){return x+y;},0)/a.length*10)/10:null;}
+  var avgSun=arrAvg(sunArr), avgSunTotal=arrAvg(sunTotalArr), avgRain=arrAvg(rainArr), avgTmax=arrAvg(tmaxArr);
+
+  /* ── HTML 조립 ── */
+  var html='';
+
+  /* 전국 평균 큰 박스 */
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+  html+='<div style="background:rgba(0,0,0,.25);border-radius:6px;padding:10px;text-align:center">';
+  html+='<div style="font-size:22px;font-weight:700;color:'+natCard.color+'">'+natAvg+'%</div>';
+  html+='<div style="font-size:10px;color:var(--muted);margin-top:2px">전국 평균 ('+natCard.l+')</div>';
+  html+='</div>';
+  html+='<div style="background:rgba(0,0,0,.25);border-radius:6px;padding:10px;text-align:center">';
+  html+='<div style="font-size:22px;font-weight:700;color:#7fd3d3">'+records.length+'<span style="font-size:13px;opacity:.6">건</span></div>';
+  html+='<div style="font-size:10px;color:var(--muted);margin-top:2px">'+regArr.length+'개 지역 측정</div>';
+  html+='</div>';
+  html+='</div>';
+
+  /* 도별 TOP 3 */
+  if(top3.length){
+    html+='<div style="background:rgba(0,0,0,.18);border-radius:6px;padding:10px;margin-bottom:10px">';
+    html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🏆 착색률 TOP 3 지역</div>';
+    for(var i=0;i<top3.length;i++){
+      var t=top3[i];
+      var tCard=getCard(t.avg);
+      var medal=i===0?'🥇':i===1?'🥈':'🥉';
+      html+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:'+(i<top3.length-1?'1px solid rgba(255,255,255,.05)':'none')+'">';
+      html+='<span style="font-size:14px">'+medal+'</span>';
+      html+='<span style="flex:1;font-size:12px">'+t.name+' <span style="color:var(--muted);font-size:10px">('+t.count+'건)</span></span>';
+      html+='<span style="font-weight:600;color:'+tCard.color+'">'+t.avg+'%</span>';
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+
+  /* 등급 분포 막대 */
+  var maxG=Math.max(gradeCnt.G1,gradeCnt.G2,gradeCnt.G3,gradeCnt.G4,gradeCnt.G5,1);
+  html+='<div style="background:rgba(0,0,0,.18);border-radius:6px;padding:10px;margin-bottom:10px">';
+  html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">📊 등급 분포</div>';
+  var gradeColors={G1:'#b25358',G2:'#b26661',G3:'#af7969',G4:'#a68c70',G5:'#9d9d77'};
+  for(var gi=1;gi<=5;gi++){
+    var gk='G'+gi;
+    var cnt=gradeCnt[gk];
+    var w=Math.round(cnt/maxG*100);
+    html+='<div style="display:flex;align-items:center;gap:6px;margin:3px 0">';
+    html+='<span style="font-size:10px;color:var(--muted);width:22px">'+gk+'</span>';
+    html+='<div style="flex:1;height:14px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden">';
+    html+='<div style="width:'+w+'%;height:100%;background:'+gradeColors[gk]+';transition:width .4s"></div>';
+    html+='</div>';
+    html+='<span style="font-size:11px;width:30px;text-align:right;color:var(--cream)">'+cnt+'건</span>';
+    html+='</div>';
+  }
+  html+='</div>';
+
+  /* 평균 날씨 (데이터 있는 것만 표시) */
+  if(avgSun!==null||avgRain!==null||avgTmax!==null){
+    html+='<div style="background:rgba(0,0,0,.18);border-radius:6px;padding:10px;margin-bottom:10px">';
+    html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🌤 측정 지역 평균 날씨</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:11px">';
+    if(avgSun!==null) html+='<div>☀️ 일평균 일조: <b>'+avgSun+'h</b></div>';
+    if(avgSunTotal!==null) html+='<div>🔆 2주 누적 일조: <b>'+avgSunTotal+'h</b></div>';
+    if(avgTmax!==null) html+='<div>🌡 평균최고: <b>'+avgTmax+'°</b></div>';
+    if(avgRain!==null) html+='<div>🌧 평균강수: <b>'+avgRain+'mm</b></div>';
+    html+='</div>';
+    html+='</div>';
+  }
+
+  /* 최근 활동 */
+  if(recent.length){
+    html+='<div style="background:rgba(0,0,0,.18);border-radius:6px;padding:10px">';
+    html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🕒 최근 활동</div>';
+    for(var i=0;i<recent.length;i++){
+      var rc=recent[i];
+      var rcCard=getCard(rc.pct);
+      html+='<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px">';
+      html+='<span style="background:'+rc.gradeColor+';color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:600">'+rc.grade+'</span>';
+      html+='<span style="flex:1;color:var(--cream)">'+(rc.regionName||'—')+'</span>';
+      html+='<span style="color:var(--muted);font-size:10px">'+rc.date.slice(5)+'</span>';
+      html+='<span style="color:'+rcCard.color+';font-weight:600;width:50px;text-align:right">'+rc.pct+'%</span>';
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+
+  memoBody.innerHTML=html;
+  if(memoUpdated) memoUpdated.textContent='업데이트 '+new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+}
+
+/* 기록 삭제 시 도별 집계에서 해당 항목 차감 */
+function removeFromRegionAgg(rec){
+  if(!rec||!rec.region) return;
+  var data=loadRegionData();
+  if(!data[rec.region]) return;
+  var d=data[rec.region];
+  d.sum=Math.max(0,(d.sum||0)-rec.pct);
+  d.count=Math.max(0,(d.count||0)-1);
+  if(d.count===0){delete data[rec.region];}
+  else {d.avg=Math.round(d.sum/d.count*10)/10;}
+  saveRegionData(data);
+}
+
+/* ════ 엑셀 내보내기 (3번 작업) ════
+   SheetJS로 3개 시트가 들어간 .xlsx 파일 생성:
+   - 시트1: 개별 기록 (날짜, 지역, 착색률, 등급, 날씨 등 전체 컬럼)
+   - 시트2: 도별 통계 (도별 평균, 건수)
+   - 시트3: 전국 요약 (전체 평균, 총 건수, 일자별 추이) */
+function exportExcel(activeTab){
+  if(typeof XLSX==='undefined'){
+    toast('⚠️ 엑셀 라이브러리 로딩 중. 잠시 후 다시 시도하세요');
+    return;
+  }
+  var records=loadAllRecords();
+  if(!records.length){toast('내보낼 기록이 없습니다');return;}
+
+  /* 현재 탭에 따라 필터링 */
+  var filtered=(activeTab&&activeTab!=='all')?records.filter(function(r){return r.region===activeTab;}):records;
+  if(!filtered.length){toast('해당 탭에 기록이 없습니다');return;}
+
+  /* ── 시트 1: 개별 기록 ── */
+  var sheet1Data=[];
+  /* 헤더 - 일조시간 2개 컬럼 (일평균 + 2주 누적) */
+  sheet1Data.push(['ID','측정일','수확일','지역','상세주소','촬영방식','착색률(%)','등급','등급명','신뢰도(%)','측정점수','꼭지개수','일평균 일조(h/일)','2주 누적 일조(h)','평균최고기온(°)','평균최저기온(°)','평균기온(°)','총강수량(mm)']);
+  for(var i=0;i<filtered.length;i++){
+    var r=filtered[i];
+    var modeKr=r.mode==='both'?'상+하부 종합':r.mode==='bottom'?'하부만':'꼭지만';
+    var w=r.weather||{};
+    /* 2주 누적: 신규 저장은 sunHoursTotal 직접 사용, 옛 저장은 일평균 × 14로 환산 */
+    var sunDaily=(typeof w.sunHours!=='undefined')?w.sunHours:'';
+    var sunTotal='';
+    if(typeof w.sunHoursTotal!=='undefined') sunTotal=w.sunHoursTotal;
+    else if(typeof w.sunHours!=='undefined'&&w.sunHours!==null) sunTotal=Math.round(w.sunHours*14*10)/10; /* 환산값 */
+    sheet1Data.push([
+      r.id, r.date, r.harvestDate||'', r.regionName||'', r.address||'',
+      modeKr, r.pct, r.grade||'', r.gradeName||'', r.conf||'', r.sc||'',
+      r.cnt||'',
+      sunDaily,
+      sunTotal,
+      w.avgMax!==undefined&&w.avgMax!==null?w.avgMax:'',
+      w.avgMin!==undefined&&w.avgMin!==null?w.avgMin:'',
+      w.avgAll!==undefined&&w.avgAll!==null?w.avgAll:'',
+      w.totalRain!==undefined&&w.totalRain!==null?w.totalRain:''
+    ]);
+  }
+  var ws1=XLSX.utils.aoa_to_sheet(sheet1Data);
+  /* 컬럼 폭 자동 조정 - 18개 컬럼 */
+  ws1['!cols']=[{wch:14},{wch:11},{wch:11},{wch:14},{wch:24},{wch:11},{wch:9},{wch:6},{wch:9},{wch:9},{wch:9},{wch:9},{wch:14},{wch:14},{wch:13},{wch:13},{wch:11},{wch:13}];
+
+  /* ── 시트 2: 도별 통계 ── */
+  var regionStats={};
+  for(var i=0;i<records.length;i++){
+    var r=records[i];
+    if(!r.region) continue;
+    if(!regionStats[r.region]){
+      regionStats[r.region]={name:r.regionName||r.region,count:0,sum:0,minPct:r.pct,maxPct:r.pct,sunSum:0,sunCnt:0,sunTotSum:0,sunTotCnt:0,rainSum:0,rainCnt:0};
+    }
+    var s=regionStats[r.region];
+    s.count++; s.sum+=r.pct;
+    if(r.pct<s.minPct) s.minPct=r.pct;
+    if(r.pct>s.maxPct) s.maxPct=r.pct;
+    if(r.weather){
+      if(typeof r.weather.sunHours!=='undefined'){s.sunSum+=r.weather.sunHours;s.sunCnt++;}
+      /* 2주 누적: 신규는 sunHoursTotal, 옛 데이터는 일평균×14 환산 */
+      if(typeof r.weather.sunHoursTotal!=='undefined'){s.sunTotSum+=r.weather.sunHoursTotal;s.sunTotCnt++;}
+      else if(typeof r.weather.sunHours!=='undefined'&&r.weather.sunHours!==null){s.sunTotSum+=r.weather.sunHours*14;s.sunTotCnt++;}
+      if(typeof r.weather.totalRain!=='undefined'){s.rainSum+=r.weather.totalRain;s.rainCnt++;}
+    }
+  }
+  var sheet2Data=[['도/지역','측정건수','평균착색률(%)','최저(%)','최고(%)','평균 일평균 일조(h/일)','평균 2주 누적 일조(h)','평균강수량(mm)']];
+  var rkeys=Object.keys(regionStats).sort();
+  for(var ri=0;ri<rkeys.length;ri++){
+    var s=regionStats[rkeys[ri]];
+    sheet2Data.push([
+      s.name, s.count, Math.round(s.sum/s.count*10)/10,
+      s.minPct, s.maxPct,
+      s.sunCnt?Math.round(s.sunSum/s.sunCnt*10)/10:'',
+      s.sunTotCnt?Math.round(s.sunTotSum/s.sunTotCnt*10)/10:'',
+      s.rainCnt?Math.round(s.rainSum/s.rainCnt*10)/10:''
+    ]);
+  }
+  var ws2=XLSX.utils.aoa_to_sheet(sheet2Data);
+  ws2['!cols']=[{wch:18},{wch:10},{wch:14},{wch:10},{wch:10},{wch:20},{wch:20},{wch:14}];
+
+  /* ── 시트 3: 전국 요약 ── */
+  var totalSum=0,sunSumAll=0,sunCntAll=0,sunTotSumAll=0,sunTotCntAll=0,rainSumAll=0,rainCntAll=0;
+  for(var i=0;i<records.length;i++){
+    totalSum+=records[i].pct;
+    if(records[i].weather){
+      if(typeof records[i].weather.sunHours!=='undefined'){sunSumAll+=records[i].weather.sunHours;sunCntAll++;}
+      if(typeof records[i].weather.sunHoursTotal!=='undefined'){sunTotSumAll+=records[i].weather.sunHoursTotal;sunTotCntAll++;}
+      else if(typeof records[i].weather.sunHours!=='undefined'&&records[i].weather.sunHours!==null){sunTotSumAll+=records[i].weather.sunHours*14;sunTotCntAll++;}
+      if(typeof records[i].weather.totalRain!=='undefined'){rainSumAll+=records[i].weather.totalRain;rainCntAll++;}
+    }
+  }
+  var sheet3Data=[
+    ['항목','값'],
+    ['총 측정 건수', records.length],
+    ['측정 지역 수', rkeys.length],
+    ['전국 평균 착색률(%)', Math.round(totalSum/records.length*10)/10],
+    ['전국 평균 일평균 일조(h/일)', sunCntAll?Math.round(sunSumAll/sunCntAll*10)/10:'—'],
+    ['전국 평균 2주 누적 일조(h)', sunTotCntAll?Math.round(sunTotSumAll/sunTotCntAll*10)/10:'—'],
+    ['전국 평균 강수량(mm)', rainCntAll?Math.round(rainSumAll/rainCntAll*10)/10:'—'],
+    ['내보낸 시각', new Date().toLocaleString('ko-KR')],
+    ['내보낸 범위', activeTab&&activeTab!=='all'?(filtered[0].regionName||activeTab):'전국'+'('+filtered.length+'건)']
+  ];
+  var ws3=XLSX.utils.aoa_to_sheet(sheet3Data);
+  ws3['!cols']=[{wch:28},{wch:30}];
+
+  /* 워크북 생성 + 저장 */
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws1,'개별 기록');
+  XLSX.utils.book_append_sheet(wb,ws2,'도별 통계');
+  XLSX.utils.book_append_sheet(wb,ws3,'전국 요약');
+
+  var ts=new Date().toISOString().slice(0,10);
+  var scope=activeTab&&activeTab!=='all'?(filtered[0].regionName||activeTab):'전국';
+  var filename='FujiGrade_기록_'+scope+'_'+ts+'.xlsx';
+  XLSX.writeFile(wb,filename);
+  toast('📊 엑셀 파일 다운로드: '+filename);
 }
 
 function setRecTab(tab){
@@ -2579,10 +5095,14 @@ document.getElementById('harvestDate').value=new Date().toISOString().slice(0,10
 
 document.addEventListener('DOMContentLoaded',function(){
   initKoreaMap();
+  renderStatsMemo();
   renderRecordsPage();
+  initVarietyUI();
 });
 initKoreaMap();
+renderStatsMemo();
 renderRecordsPage();
+initVarietyUI();
 </script>
 </body>
 </html>

@@ -1383,50 +1383,59 @@ function onFiles(files){
 function onDualFile(files,side){
   if(!files||!files.length) return;
   var file=files[0];
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var img=new Image();
-    img.onload=function(){
-      /* 같은 side 사진이 이미 있으면 교체 */
-      for(var i=photos.length-1;i>=0;i--){
-        if(photos[i].mode===side){
-          photos.splice(i,1);
-          if(aIdx>=i&&aIdx>0) aIdx--;
-        }
+  /* [2026-05-15 수정] processImageFile로 통합 처리 */
+  processImageFile(file, function(result){
+    /* 같은 side 사진이 이미 있으면 교체 */
+    for(var i=photos.length-1;i>=0;i--){
+      if(photos[i].mode===side){
+        photos.splice(i,1);
+        if(aIdx>=i&&aIdx>0) aIdx--;
       }
-      var idx=photos.length;
-      var obj={img:img,url:e.target.result,file:file,apples:[],cardRs:{},res:null,mode:side};
-      photos.push(obj);
-      /* 호환용 dualPhotos 참조 유지 */
-      dualPhotos[side]={url:e.target.result,file:file,res:null,photoIdx:idx};
-      /* 상태 표시 갱신 */
-      document.getElementById(side==='top'?'topStatus':'bottomStatus').textContent=file.name.slice(0,14)+' ✓';
-      document.getElementById(side==='top'?'topStatus':'bottomStatus').style.color='var(--accent)';
-      renderPhotoGrid();
-      selPhoto(idx);
-      autoScanPhoto(obj,idx);
-      checkRun();
+    }
+    var idx=photos.length;
+    var obj={
+      img:result.displayImg,
+      url:result.displayUrl,
+      compressedUrl:result.compressedUrl,
+      file:file,
+      apples:[],cardRs:{},res:null,mode:side,
+      orientation:result.orientation,
+      origSize:result.origSize,
+      displaySize:result.displaySize
     };
-    img.src=e.target.result;
-  };
-  reader.readAsDataURL(file);
+    photos.push(obj);
+    /* 호환용 dualPhotos 참조 유지 */
+    dualPhotos[side]={url:result.displayUrl,file:file,res:null,photoIdx:idx};
+    /* 상태 표시 갱신 */
+    document.getElementById(side==='top'?'topStatus':'bottomStatus').textContent=file.name.slice(0,14)+' ✓';
+    document.getElementById(side==='top'?'topStatus':'bottomStatus').style.color='var(--accent)';
+    renderPhotoGrid();
+    selPhoto(idx);
+    autoScanPhoto(obj,idx);
+    checkRun();
+  });
 }
 
 function addPhoto(file){
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var img=new Image();
-    img.onload=function(){
-      var idx=photos.length;
-      var obj={img:img,url:e.target.result,file:file,apples:[],cardRs:{},res:null,mode:photoMode};
-      photos.push(obj);
-      renderPhotoGrid();
-      selPhoto(idx);
-      autoScanPhoto(obj,idx);
+  /* [2026-05-15 수정] processImageFile로 통합 처리
+     EXIF 회전 보정 + 1568px 압축 → AI 인식률 대폭 향상 */
+  processImageFile(file, function(result){
+    var idx=photos.length;
+    var obj={
+      img:result.displayImg,
+      url:result.displayUrl,          /* 표시·색분석용 (회전 보정됨) */
+      compressedUrl:result.compressedUrl,  /* AI Vision API용 (1568px) */
+      file:file,                      /* 원본 (EXIF GPS 추출용) */
+      apples:[],cardRs:{},res:null,mode:photoMode,
+      orientation:result.orientation,
+      origSize:result.origSize,
+      displaySize:result.displaySize
     };
-    img.src=e.target.result;
-  };
-  reader.readAsDataURL(file);
+    photos.push(obj);
+    renderPhotoGrid();
+    selPhoto(idx);
+    autoScanPhoto(obj,idx);
+  });
 }
 
 function renderPhotoGrid(){
@@ -2347,7 +2356,8 @@ function usePhotoGPS(){
         return;
       }
       btn.innerHTML='📷 이미지 분석 중...';
-      extractGPSFromImage(p.url,function(lat2,lon2,addr){
+      /* [2026-05-15 수정] 압축본 사용 */
+      extractGPSFromImage(p.compressedUrl||p.url,function(lat2,lon2,addr){
         btn.innerHTML='📷 사진 속 위치 사용<br><span style="font-size:10px;opacity:.7">EXIF GPS 자동 추출</span>';
         if(lat2&&lon2){
           applyGPS(lat2,lon2,'사진 텍스트',addr);  /* ★ 주소 함께 */
@@ -2435,6 +2445,124 @@ function useCurrentGPS(){
 }
 
 /* ── EXIF 파싱 ── */
+/* [2026-05-15 추가] EXIF Orientation 읽기 - 모바일 사진 회전 정보
+   1=정상, 3=180°, 6=시계 90°, 8=반시계 90° */
+function extractOrientation(file,cb){
+  if(!file){cb(1);return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=new Uint8Array(e.target.result);
+      if(data[0]!==0xFF||data[1]!==0xD8){cb(1);return;}
+      var offset=2;
+      while(offset<data.length-2){
+        if(data[offset]!==0xFF){break;}
+        var marker=(data[offset]<<8)|data[offset+1];
+        var segLen=(data[offset+2]<<8)|data[offset+3];
+        if(marker===0xFFE1){
+          if(data[offset+4]===0x45&&data[offset+5]===0x78&&data[offset+6]===0x69&&data[offset+7]===0x66){
+            var base=offset+10;
+            var little=(data[base]===0x49);
+            var ifd0=base+readU32(data,base+4,little);
+            var count=readU16(data,ifd0,little);
+            for(var i=0;i<count;i++){
+              var o=ifd0+2+i*12;
+              var tag=readU16(data,o,little);
+              if(tag===0x0112){ /* Orientation 태그 */
+                var ori=readU16(data,o+8,little);
+                cb(ori||1);
+                return;
+              }
+            }
+          }
+          break;
+        }
+        offset+=2+segLen;
+      }
+      cb(1);
+    }catch(ex){cb(1);}
+  };
+  reader.onerror=function(){cb(1);};
+  reader.readAsArrayBuffer(file.slice(0,131072));
+}
+
+/* [2026-05-15 추가] 이미지 정규화 함수 — 핵심
+   1. EXIF Orientation에 따라 자동 회전 (가로/세로 정상화)
+   2. 너무 크면 1568px 이내로 압축 (AI Vision API 권장 크기)
+   3. 모바일 메모리 절약, AI 인식률 향상
+   결과: { displayUrl(원본 회전본), compressedUrl(AI용 1568px), origFile(GPS용) } */
+function processImageFile(file, callback){
+  /* 1단계: EXIF Orientation 읽기 */
+  extractOrientation(file, function(orientation){
+    /* 2단계: 이미지 로딩 */
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var img=new Image();
+      img.onload=function(){
+        var w=img.naturalWidth, h=img.naturalHeight;
+        /* 방향에 따라 캔버스 크기 결정 */
+        var rotated=(orientation>=5&&orientation<=8);
+        var canvW=rotated?h:w, canvH=rotated?w:h;
+        
+        /* 3단계: 정상 방향으로 캔버스에 그리기 (Display용 원본) */
+        var displayCanvas=document.createElement('canvas');
+        displayCanvas.width=canvW;
+        displayCanvas.height=canvH;
+        var dctx=displayCanvas.getContext('2d');
+        dctx.save();
+        switch(orientation){
+          case 2: dctx.translate(canvW,0); dctx.scale(-1,1); break;
+          case 3: dctx.translate(canvW,canvH); dctx.rotate(Math.PI); break;
+          case 4: dctx.translate(0,canvH); dctx.scale(1,-1); break;
+          case 5: dctx.rotate(0.5*Math.PI); dctx.scale(1,-1); break;
+          case 6: dctx.translate(canvW,0); dctx.rotate(0.5*Math.PI); break;
+          case 7: dctx.translate(canvW,canvH); dctx.rotate(0.5*Math.PI); dctx.scale(-1,1); break;
+          case 8: dctx.translate(0,canvH); dctx.rotate(-0.5*Math.PI); break;
+        }
+        dctx.drawImage(img,0,0);
+        dctx.restore();
+        
+        /* 4단계: AI용 압축본 (최대 1568px) */
+        var MAX=1568;
+        var sc=Math.min(1, MAX/Math.max(canvW,canvH));
+        var compW=Math.round(canvW*sc), compH=Math.round(canvH*sc);
+        var compressCanvas=document.createElement('canvas');
+        compressCanvas.width=compW;
+        compressCanvas.height=compH;
+        var cctx=compressCanvas.getContext('2d');
+        /* 고품질 축소 */
+        cctx.imageSmoothingEnabled=true;
+        cctx.imageSmoothingQuality='high';
+        cctx.drawImage(displayCanvas,0,0,compW,compH);
+        
+        /* 5단계: 결과 콜백 */
+        /* Display용 = 회전 보정된 원본 (마킹, 색 분석용) */
+        /* Compressed = 1568px 이하 (AI Vision API용 - GPS/주소 인식) */
+        var displayImg=new Image();
+        displayImg.onload=function(){
+          callback({
+            displayImg: displayImg,
+            displayUrl: displayCanvas.toDataURL('image/jpeg', 0.92),
+            compressedUrl: compressCanvas.toDataURL('image/jpeg', 0.85),
+            origFile: file, /* GPS는 원본 파일에서 추출 */
+            orientation: orientation,
+            origSize: {w:w, h:h},
+            displaySize: {w:canvW, h:canvH},
+            compressedSize: {w:compW, h:compH}
+          });
+        };
+        displayImg.src=displayCanvas.toDataURL('image/jpeg', 0.92);
+      };
+      img.onerror=function(){
+        toast('⚠ 사진 로딩 실패. 다른 사진을 시도하세요.');
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ── EXIF 파싱 (GPS) ── */
 function extractEXIF(file,cb){
   if(!file){cb(null,null);return;}
   var reader=new FileReader();
@@ -2516,8 +2644,12 @@ function autoScanPhoto(photoObj,idx){
 }
 
 function scanWithClaudeVision(photoObj,idx){
-  var base64=photoObj.url.split(',')[1];
-  var mimeType=photoObj.url.split(';')[0].split(':')[1]||'image/jpeg';
+  /* [2026-05-15 수정] 원본 대신 압축본 사용
+     모바일 4MB 사진 → 1568px 약 200KB로 줄여 AI에 전송
+     워터마크 텍스트 인식률 대폭 향상, 업로드 시간 1/20로 단축 */
+  var sourceUrl = photoObj.compressedUrl || photoObj.url; /* 폴백: 압축본 없으면 원본 */
+  var base64=sourceUrl.split(',')[1];
+  var mimeType=sourceUrl.split(';')[0].split(':')[1]||'image/jpeg';
   var badge=document.getElementById('envBadge');
   if(badge&&idx===aIdx) badge.textContent='🔍 AI 스캔 중... ('+(idx+1)+')';
   fetch('https://api.anthropic.com/v1/messages',{

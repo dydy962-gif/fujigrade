@@ -1897,42 +1897,56 @@ function parseSAM3Item(item, imgW, imgH, idx){
   return null;
 }
 
-/* 폴리곤 좌표 처리 */
+/* 폴리곤 좌표 처리
+   지원 형식:
+   A) [x,y,x,y,...] 평탄 숫자 배열 (SAM3 실제 형식)
+   B) [[x,y],[x,y],...] 쌍 배열
+   C) [{x,y},{x,y},...] 객체 배열
+   모두 픽셀 좌표(0~imgW) 또는 정규화(0~1) 자동 감지 */
 function parseSAM3Polygon(points, score, imgW, imgH, idx){
   if(!points || points.length < 3) return null;
-  
-  /* 좌표 정규화 (0~1) — 픽셀 좌표라고 가정 */
+
   var normPoints = [];
   var sumX = 0, sumY = 0;
-  var minX = imgW, minY = imgH, maxX = 0, maxY = 0;
-  
-  for(var i = 0; i < points.length; i++){
-    var pt = points[i];
-    var x, y;
-    if(Array.isArray(pt)){
-      x = pt[0]; y = pt[1];
-    } else if(pt.x !== undefined){
-      x = pt.x; y = pt.y;
-    } else {
-      continue;
+
+  /* 형식 감지: 첫 요소가 숫자면 평탄 배열 [x,y,x,y,...] */
+  if(typeof points[0] === 'number'){
+    /* SAM3 실제 형식: [x, y, x, y, ...] */
+    for(var i = 0; i < points.length - 1; i += 2){
+      var x = points[i], y = points[i+1];
+      if(isNaN(x) || isNaN(y)) continue;
+      /* 픽셀 좌표면 정규화 */
+      if(x > 1) x = x / imgW;
+      if(y > 1) y = y / imgH;
+      normPoints.push([x, y]);
+      sumX += x; sumY += y;
     }
-    /* 0~1 범위면 그대로, 픽셀 좌표면 정규화 */
-    if(x > 1) x = x / imgW;
-    if(y > 1) y = y / imgH;
-    normPoints.push([x, y]);
-    sumX += x; sumY += y;
-    if(x < minX/imgW) minX = x * imgW;
-    if(y < minY/imgH) minY = y * imgH;
-    if(x > maxX/imgW) maxX = x * imgW;
-    if(y > maxY/imgH) maxY = y * imgH;
+  } else {
+    /* [[x,y],...] 또는 [{x,y},...] 형식 */
+    for(var i = 0; i < points.length; i++){
+      var pt = points[i];
+      var x, y;
+      if(Array.isArray(pt)){
+        x = pt[0]; y = pt[1];
+      } else if(pt && pt.x !== undefined){
+        x = pt.x; y = pt.y;
+      } else {
+        continue;
+      }
+      if(isNaN(x) || isNaN(y)) continue;
+      if(x > 1) x = x / imgW;
+      if(y > 1) y = y / imgH;
+      normPoints.push([x, y]);
+      sumX += x; sumY += y;
+    }
   }
-  
+
   if(normPoints.length < 3) return null;
-  
+
   var cx = sumX / normPoints.length;
   var cy = sumY / normPoints.length;
-  
-  /* 반지름 추정: 가장 멀리 있는 점까지 거리 */
+
+  /* 반지름: 중심에서 가장 먼 점까지 거리 */
   var maxDist = 0;
   for(var i = 0; i < normPoints.length; i++){
     var dx = normPoints[i][0] - cx;
@@ -1940,7 +1954,7 @@ function parseSAM3Polygon(points, score, imgW, imgH, idx){
     var d = Math.sqrt(dx*dx + dy*dy);
     if(d > maxDist) maxDist = d;
   }
-  
+
   return {
     x: cx,
     y: cy,

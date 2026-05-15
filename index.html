@@ -577,7 +577,10 @@ function hideKreiSplash(){
     <button class="nav-tab" onclick="showPage('records',this)">기록</button>
     <button class="nav-tab" onclick="showPage('refs',this)">참고 자료</button>
   </div>
-  <div class="nav-right">v21 · 꼭지+하부</div>
+  <div class="nav-right">
+    <button onclick="showAISettings()" style="background:transparent;border:1px solid rgba(255,255,255,.15);color:var(--muted);padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;margin-right:8px" title="AI API 키 설정">🔑 AI</button>
+    <span style="font-size:11px;color:var(--muted)">v22 · 박스</span>
+  </div>
 </nav>
 
 <!-- 분석 탭 -->
@@ -623,15 +626,22 @@ function hideKreiSplash(){
 
       <!-- 촬영 모드 선택 (항목11) -->
       <div class="section-label">촬영 방식 선택</div>
-      <div class="mode-select">
+      <div class="mode-select" style="grid-template-columns:repeat(4,1fr);gap:6px">
         <button class="mode-btn on" id="modeTop" onclick="setPhotoMode('top')">🍎 꼭지만<br><span style="font-size:10px;opacity:.7">상부 촬영</span></button>
         <button class="mode-btn" id="modeBottom" onclick="setPhotoMode('bottom')">🔵 하부만<br><span style="font-size:10px;opacity:.7">꽃받침 촬영</span></button>
         <button class="mode-btn" id="modeBoth" onclick="setPhotoMode('both')">📸 상+하부<br><span style="font-size:10px;opacity:.7">2장 종합</span></button>
+        <button class="mode-btn" id="modeBox" onclick="setPhotoMode('box')" style="border-color:rgba(140,196,74,.4)">📦 박스<br><span style="font-size:10px;opacity:.7">난좌 다수</span></button>
       </div>
 
       <!-- 2장 모드 안내 -->
       <div class="dual-mode-info" id="dualModeInfo">
         📸 2장 모드: 꼭지(상부) 사진과 하부(꽃받침) 사진을 각각 업로드하면 두 부위를 종합하여 착색률을 산출합니다. 꼭지 가중치 60%, 하부 가중치 40% 적용.
+      </div>
+
+      <!-- 박스 모드 안내 (5-1 작업) -->
+      <div class="dual-mode-info" id="boxModeInfo" style="background:linear-gradient(135deg,rgba(140,196,74,.12),rgba(140,196,74,.03));border-color:rgba(140,196,74,.3)">
+        📦 <b>박스 분석 모드</b>: 5kg 15구 난좌(또는 다수 사과) 사진 1장으로 전체 평균 착색률을 산출합니다.<br>
+        <span style="font-size:10px;opacity:.85;line-height:1.6">진행 흐름: ① AI가 사과+난좌 자동 검출 → ② 사용자가 검토·수정 → ③ 난좌(흰색)를 기준으로 색 자동 보정 → ④ 사과 평균 착색률 산출</span>
       </div>
 
       <!-- 사진 업로드 -->
@@ -661,7 +671,36 @@ function hideKreiSplash(){
         </div>
       </div>
 
+      <!-- 박스 모드 업로드 영역 (5-1 작업) -->
+      <div id="uploadAreaBox" style="display:none">
+        <div class="upload-btn" style="border-color:rgba(140,196,74,.4);background:rgba(140,196,74,.05)">
+          <input type="file" id="fileBox" accept="image/*" onchange="onBoxFile(this.files)">
+          <div class="up-icon">📦</div>
+          <div class="up-title">난좌 박스 사진</div>
+          <div class="up-sub">클릭 또는 드래그 · 1장만</div>
+        </div>
+        <div style="margin-top:8px;font-size:10px;color:var(--muted);line-height:1.6;padding:8px;background:rgba(0,0,0,.15);border-radius:4px">
+          💡 <b>좋은 촬영 팁</b>: ① 박스 바로 위에서 ② 그늘에서 (직사광선 피하기) ③ 사과들이 서로 닿지 않게 ④ 난좌 흰색 영역이 충분히 보이게
+        </div>
+      </div>
+
       <div class="photo-grid" id="photoGrid"></div>
+
+      <!-- 박스 모드 상태 표시 (5-3 작업) -->
+      <div id="boxStatus" style="margin:8px 0"></div>
+
+      <!-- 박스 모드 검토 바 (5-4 작업) -->
+      <div id="boxReviewBar" style="display:none;flex-direction:column;gap:8px;margin:8px 0;padding:10px;background:rgba(0,86,102,.1);border:1px solid rgba(0,132,134,.3);border-radius:var(--r)">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:600;color:#7fd3d3;margin-right:4px">📝 검토:</span>
+          <button class="tb on" id="boxReviewBtn_add" onclick="setBoxReviewMode('add')">➕ 추가</button>
+          <button class="tb" id="boxReviewBtn_delete" onclick="setBoxReviewMode('delete')">🗑 삭제</button>
+          <button class="tb" id="boxReviewBtn_move" onclick="setBoxReviewMode('move')">✋ 이동</button>
+          <button class="tb" onclick="rerunBoxDetection()" style="margin-left:auto;font-size:11px">🔄 AI 다시</button>
+        </div>
+        <div id="boxReviewTip" style="font-size:11px;color:var(--muted);line-height:1.5">💡 빈 공간을 클릭하면 사과가 추가됩니다.</div>
+        <button onclick="startBoxColorCorrection()" style="padding:10px;background:var(--accent);color:var(--bg);border:none;border-radius:var(--r);font-weight:700;cursor:pointer;font-size:13px;font-family:var(--fm)">🎨 색 보정 + 측정 시작 →</button>
+      </div>
 
       <!-- 캔버스 -->
       <div id="cvs-wrap">
@@ -1364,10 +1403,20 @@ function setPhotoMode(m){
   document.getElementById('modeTop').className='mode-btn'+(m==='top'?' on':'');
   document.getElementById('modeBottom').className='mode-btn'+(m==='bottom'?' on':'');
   document.getElementById('modeBoth').className='mode-btn'+(m==='both'?' on':'');
+  document.getElementById('modeBox').className='mode-btn'+(m==='box'?' on':'');
+  /* 안내 박스 */
   document.getElementById('dualModeInfo').className='dual-mode-info'+(m==='both'?' show':'');
-  document.getElementById('uploadAreaSingle').style.display=m==='both'?'none':'block';
+  document.getElementById('boxModeInfo').className='dual-mode-info'+(m==='box'?' show':'');
+  /* 업로드 영역 전환 (5-1 작업: 박스 모드 추가) */
+  document.getElementById('uploadAreaSingle').style.display=(m==='both'||m==='box')?'none':'block';
   document.getElementById('uploadAreaDual').style.display=m==='both'?'block':'none';
-  document.getElementById('bMark').textContent=(m==='bottom')?'🔵 하부 마킹':'🔴 꼭지 마킹';
+  document.getElementById('uploadAreaBox').style.display=m==='box'?'block':'none';
+  /* 박스 모드는 마킹 버튼 라벨 다름 */
+  if(m==='box'){
+    document.getElementById('bMark').textContent='🍎 사과 마킹';
+  } else {
+    document.getElementById('bMark').textContent=(m==='bottom')?'🔵 하부 마킹':'🔴 꼭지 마킹';
+  }
 }
 
 /* ── 파일 업로드 (단일 모드) ── */
@@ -1375,6 +1424,410 @@ function onFiles(files){
   if(!files||!files.length) return;
   for(var i=0;i<files.length;i++) addPhoto(files[i]);
 }
+
+/* ── 파일 업로드 (박스 모드) ── (5-3 작업: AI 검출 추가)
+   박스 모드는 단일 모드와 다름:
+   - 1장만 업로드 (난좌 박스)
+   - AI가 사과+난좌 자동 검출
+   - 사용자가 검토하고 수정
+   - 자동 색 보정 후 일괄 측정 */
+function onBoxFile(files){
+  if(!files||!files.length) return;
+  var file=files[0];
+  processImageFile(file, function(result){
+    /* 박스 모드는 photos 배열 비우고 1장만 유지 */
+    photos = [];
+    var obj={
+      img:result.displayImg,
+      url:result.displayUrl,
+      compressedUrl:result.compressedUrl,
+      file:file,
+      apples:[],cardRs:{},res:null,mode:'box',
+      orientation:result.orientation,
+      origSize:result.origSize,
+      displaySize:result.displaySize,
+      /* 박스 모드 전용 필드 */
+      trayMask:null,
+      trayAvgRGB:null,
+      detectedApples:null,
+      wbCorrected:false,
+      boxResult:null
+    };
+    photos.push(obj);
+    aIdx=0;
+    renderPhotoGrid();
+    selPhoto(0);
+    toast('📦 박스 사진 업로드 완료. AI 자동 검출 시작...');
+    /* 자동 AI 검출 시작 */
+    setTimeout(function(){
+      detectApplesInBox(obj, 0);
+    }, 500);
+  });
+}
+
+/* ════════════════════════════════════════════════════
+   박스 모드 AI 사과 + 난좌 검출 (5-3 작업)
+   ════════════════════════════════════════════════════
+   Claude Vision에게 사진을 보내서:
+   1. 사과 모든 개수의 중심 좌표 + 반지름 검출
+   2. 흰색 난좌 영역 확인 (분명히 있는지)
+   3. 사과 종류·등급 거친 추정 (선택)
+   
+   응답을 받으면 사용자가 검토/수정할 수 있는 UI로 전달 */
+function detectApplesInBox(photoObj, idx){
+  /* 키 확인 먼저 */
+  var keyInfo = AIConfig.getActiveKey();
+  if(!keyInfo.key){
+    toast('⚠ API 키가 없습니다. 우측 상단 🔑 AI 버튼으로 키를 등록하세요.');
+    /* 검출 실패 → 수동 모드 안내 */
+    setBoxStatus('keyMissing');
+    return;
+  }
+  
+  setBoxStatus('detecting');
+  
+  /* AI에게 보낼 프롬프트 — 정확성 최우선 */
+  var prompt = '이 사진은 사과(후지 또는 홍로) 난좌(흰색 EPS 폼 트레이) 박스입니다. 다음 정보를 JSON으로만 응답하세요.\n\n' +
+    '1. apples: 사진 속 모든 사과의 위치. 각 사과마다 {x, y, r} 형식 (x,y=중심좌표, r=반지름, 모두 0~1로 정규화된 값, x는 좌→우, y는 상→하).\n' +
+    '2. tray_visible: 흰색 난좌 영역이 분명히 보이는지 (true/false).\n' +
+    '3. count: 검출된 사과 개수.\n' +
+    '4. quality_warning: 사진 품질 문제 (그림자 강함, 과노출, 흐림 등). 없으면 null.\n\n' +
+    '응답 예시:\n' +
+    '{"apples":[{"x":0.15,"y":0.20,"r":0.08},{"x":0.30,"y":0.20,"r":0.08}],"tray_visible":true,"count":2,"quality_warning":null}\n\n' +
+    '주의: 사과끼리 겹쳐 있어도 각각 따로 인식하세요. 사과가 아닌 것(잎, 그림자, 박스 글씨)은 제외하세요. 다른 텍스트 없이 JSON만 응답하세요.';
+  
+  callAI(photoObj.compressedUrl, prompt, {maxTokens: 2000}).then(function(res){
+    if(!res.success){
+      console.error('[Box Detect] AI 호출 실패:', res.error);
+      if(res.needsKey){
+        toast('⚠ API 키 필요. 🔑 AI 버튼으로 등록하세요.');
+        setBoxStatus('keyMissing');
+      } else {
+        toast('⚠ AI 검출 실패: ' + res.error);
+        setBoxStatus('error');
+      }
+      return;
+    }
+    
+    /* JSON 파싱 */
+    var data = parseAIJson(res.text);
+    if(!data || !data.apples || !Array.isArray(data.apples)){
+      console.error('[Box Detect] JSON 파싱 실패. 응답:', res.text);
+      toast('⚠ AI 응답을 이해할 수 없습니다. 수동 마킹으로 진행하세요.');
+      setBoxStatus('error');
+      return;
+    }
+    
+    /* 검출 결과 저장 */
+    photoObj.detectedApples = data.apples;
+    photoObj.trayVisible = !!data.tray_visible;
+    photoObj.qualityWarning = data.quality_warning || null;
+    
+    /* 캔버스에 검출 결과 그리기 */
+    drawDetectedApples(photoObj);
+    
+    /* 사용자 안내 */
+    var msg = '🤖 AI 검출 완료: 사과 ' + data.apples.length + '개';
+    if(data.quality_warning) msg += ' (' + data.quality_warning + ')';
+    toast(msg);
+    
+    setBoxStatus('detected', data.apples.length);
+    
+    if(!data.tray_visible){
+      setTimeout(function(){
+        toast('⚠ 난좌(흰색 트레이)가 잘 안 보입니다. 색 보정 정확도가 낮을 수 있습니다.');
+      }, 1500);
+    }
+  });
+}
+
+/* 검출된 사과를 캔버스에 시각화 — redraw가 박스 모드 자동 처리 */
+function drawDetectedApples(photoObj){
+  if(aIdx<0||photos[aIdx]!==photoObj) return;
+  redraw(); /* 박스 모드일 경우 redraw가 자동으로 빨간 원 그림 */
+}
+
+/* 박스 모드 상태 UI 갱신 */
+function setBoxStatus(status, count){
+  var statusEl = document.getElementById('boxStatus');
+  if(!statusEl) return;
+  
+  var html = '';
+  switch(status){
+    case 'detecting':
+      html = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(74,159,212,.1);border-radius:6px;border-left:3px solid #4a9fd4">🤖 <b>AI 검출 중...</b> <span style="color:var(--muted);font-size:11px">사진을 분석하고 있어요. 10~30초 소요</span></div>';
+      break;
+    case 'detected':
+      html = '<div style="padding:10px;background:rgba(140,196,74,.1);border-radius:6px;border-left:3px solid var(--accent)">' +
+        '<div style="font-weight:600;color:var(--accent);margin-bottom:4px">✅ AI 검출 완료 — 사과 ' + count + '개</div>' +
+        '<div style="font-size:11px;color:var(--cream);line-height:1.6">캔버스의 <b style="color:#e74c3c">빨간 원</b>이 AI가 검출한 사과입니다. 다음 단계에서 검토/수정할 수 있습니다 (5-4 작업).</div>' +
+        '</div>';
+      break;
+    case 'keyMissing':
+      html = '<div style="padding:10px;background:rgba(255,193,7,.1);border-radius:6px;border-left:3px solid #ffc107">' +
+        '<div style="font-weight:600;color:#ffc107;margin-bottom:4px">🔑 API 키 필요</div>' +
+        '<div style="font-size:11px;color:var(--cream);line-height:1.6">우측 상단의 <b>🔑 AI</b> 버튼을 눌러 Claude API 키를 등록하세요. 키는 <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a>에서 발급받을 수 있습니다.</div>' +
+        '</div>';
+      break;
+    case 'error':
+      html = '<div style="padding:10px;background:rgba(231,76,60,.1);border-radius:6px;border-left:3px solid #e74c3c">' +
+        '<div style="font-weight:600;color:#e74c3c;margin-bottom:4px">⚠ AI 검출 실패</div>' +
+        '<div style="font-size:11px;color:var(--cream);line-height:1.6">콘솔(F12)에서 오류 메시지를 확인하거나, 수동으로 사과를 마킹하세요.</div>' +
+        '</div>';
+      break;
+    default:
+      html = '';
+  }
+  statusEl.innerHTML = html;
+  /* 검출 완료 시 검토 UI 표시 (5-4 작업) */
+  var reviewEl = document.getElementById('boxReviewBar');
+  if(reviewEl){
+    reviewEl.style.display = (status==='detected')?'flex':'none';
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   사용자 검토 UI (5-4 작업)
+   ════════════════════════════════════════════════════
+   AI가 검출한 결과를 사용자가 수정할 수 있게:
+   - 빠진 사과: 캔버스 빈 공간 클릭 → 추가
+   - 잘못된 사과: 원 클릭 → 삭제 (확인 후)
+   - 위치 살짝 빗나감: 드래그 → 이동
+   - "AI 다시 검출": 처음부터 다시
+   - "색 보정 시작": 다음 단계 진행
+   ════════════════════════════════════════════════════ */
+
+var boxReview = {
+  mode: 'add',        /* add/delete/move */
+  dragIdx: -1,        /* 드래그 중인 사과 인덱스 */
+  dragOffset: null,   /* 드래그 시작 시 클릭 위치와 사과 중심 차이 */
+  hoverIdx: -1,       /* 마우스 오버 사과 인덱스 */
+  defaultRadius: 0.05 /* 새로 추가하는 사과의 기본 반지름 (정규화) */
+};
+
+/* 검토 모드 변경 */
+function setBoxReviewMode(m){
+  boxReview.mode = m;
+  /* 버튼 활성 상태 */
+  ['add','delete','move'].forEach(function(name){
+    var btn = document.getElementById('boxReviewBtn_'+name);
+    if(btn) btn.className = 'tb' + (m===name?' on':'');
+  });
+  /* 안내 텍스트 */
+  var tip = document.getElementById('boxReviewTip');
+  if(tip){
+    if(m==='add') tip.textContent = '💡 빈 공간을 클릭하면 사과가 추가됩니다.';
+    else if(m==='delete') tip.textContent = '💡 사과 원을 클릭하면 삭제됩니다.';
+    else if(m==='move') tip.textContent = '💡 사과 원을 드래그하면 위치를 이동할 수 있습니다.';
+  }
+  /* 캔버스 커서 */
+  cvs.style.cursor = m==='delete'?'not-allowed':(m==='move'?'grab':'crosshair');
+}
+
+/* 클릭한 좌표가 어떤 사과 위에 있는지 확인 */
+function findAppleAt(photoObj, nx, ny){
+  if(!photoObj||!photoObj.detectedApples) return -1;
+  /* nx, ny는 0~1 정규화된 값 */
+  for(var i=0; i<photoObj.detectedApples.length; i++){
+    var a = photoObj.detectedApples[i];
+    var dx = nx - a.x;
+    var dy = ny - a.y;
+    if(Math.sqrt(dx*dx + dy*dy) <= a.r){
+      return i;
+    }
+  }
+  return -1;
+}
+
+/* 캔버스 클릭 → 모드에 따라 분기 (마우스다운 직후 클릭) */
+function handleBoxCanvasClick(e){
+  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return false;
+  var p = photos[aIdx];
+  if(!p.detectedApples) return false;
+  
+  var rect = cvs.getBoundingClientRect();
+  var x = (e.clientX - rect.left) * (cvs.width / rect.width);
+  var y = (e.clientY - rect.top) * (cvs.height / rect.height);
+  var nx = x / cvs.width;
+  var ny = y / cvs.height;
+  
+  var hitIdx = findAppleAt(p, nx, ny);
+  
+  if(boxReview.mode==='delete'){
+    if(hitIdx>=0){
+      p.detectedApples.splice(hitIdx, 1);
+      drawDetectedApples(p);
+      toast('🗑 사과 #'+(hitIdx+1)+' 삭제됨 (남은 '+p.detectedApples.length+'개)');
+    }
+    return true;
+  }
+  
+  if(boxReview.mode==='add'){
+    if(hitIdx<0){
+      /* 빈 공간 → 추가 */
+      /* 새 사과의 반지름은 주변 사과의 평균 반지름 사용 (없으면 기본값) */
+      var avgR = boxReview.defaultRadius;
+      if(p.detectedApples.length>0){
+        var sumR = 0;
+        for(var i=0; i<p.detectedApples.length; i++) sumR += p.detectedApples[i].r;
+        avgR = sumR / p.detectedApples.length;
+      }
+      p.detectedApples.push({x: nx, y: ny, r: avgR});
+      drawDetectedApples(p);
+      toast('➕ 사과 추가 (총 '+p.detectedApples.length+'개)');
+    } else {
+      toast('이미 사과가 있는 위치입니다. 삭제 모드로 변경하세요.');
+    }
+    return true;
+  }
+  
+  /* move 모드는 mousedown/move/up에서 처리됨 */
+  return false;
+}
+
+/* 캔버스 마우스다운 (move 모드용) */
+function handleBoxCanvasMouseDown(e){
+  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return false;
+  if(boxReview.mode!=='move') return false;
+  var p = photos[aIdx];
+  if(!p.detectedApples) return false;
+  
+  var rect = cvs.getBoundingClientRect();
+  var x = (e.clientX - rect.left) * (cvs.width / rect.width);
+  var y = (e.clientY - rect.top) * (cvs.height / rect.height);
+  var nx = x / cvs.width;
+  var ny = y / cvs.height;
+  
+  var hitIdx = findAppleAt(p, nx, ny);
+  if(hitIdx>=0){
+    boxReview.dragIdx = hitIdx;
+    boxReview.dragOffset = {
+      x: nx - p.detectedApples[hitIdx].x,
+      y: ny - p.detectedApples[hitIdx].y
+    };
+    cvs.style.cursor = 'grabbing';
+    return true;
+  }
+  return false;
+}
+
+/* 캔버스 마우스이동 (드래그) */
+function handleBoxCanvasMouseMove(e){
+  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return false;
+  if(boxReview.dragIdx<0) return false;
+  var p = photos[aIdx];
+  
+  var rect = cvs.getBoundingClientRect();
+  var x = (e.clientX - rect.left) * (cvs.width / rect.width);
+  var y = (e.clientY - rect.top) * (cvs.height / rect.height);
+  var nx = x / cvs.width;
+  var ny = y / cvs.height;
+  
+  p.detectedApples[boxReview.dragIdx].x = Math.max(0, Math.min(1, nx - boxReview.dragOffset.x));
+  p.detectedApples[boxReview.dragIdx].y = Math.max(0, Math.min(1, ny - boxReview.dragOffset.y));
+  drawDetectedApples(p);
+  return true;
+}
+
+/* 캔버스 마우스업 (드래그 종료) */
+function handleBoxCanvasMouseUp(){
+  if(boxReview.dragIdx>=0){
+    toast('📍 사과 #'+(boxReview.dragIdx+1)+' 위치 변경됨');
+    boxReview.dragIdx = -1;
+    boxReview.dragOffset = null;
+    cvs.style.cursor = 'grab';
+  }
+}
+
+/* AI 재검출 */
+function rerunBoxDetection(){
+  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box'){
+    toast('박스 모드 사진이 없습니다');
+    return;
+  }
+  if(!confirm('AI 검출을 다시 실행하시겠습니까? 현재 수정사항은 사라집니다.')) return;
+  var p = photos[aIdx];
+  p.detectedApples = null;
+  detectApplesInBox(p, aIdx);
+}
+
+/* 색 보정 시작 (5-5에서 본격 구현) */
+function startBoxColorCorrection(){
+  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return;
+  var p = photos[aIdx];
+  if(!p.detectedApples || p.detectedApples.length===0){
+    toast('검출된 사과가 없습니다. AI 검출 또는 수동 추가하세요.');
+    return;
+  }
+  if(p.detectedApples.length < 5){
+    if(!confirm('사과가 '+p.detectedApples.length+'개만 검출되었습니다. 정확도가 낮을 수 있습니다. 계속하시겠습니까?')) return;
+  }
+  toast('🎨 색 보정 단계는 다음 작업(5-5)에서 추가됩니다');
+  /* 5-5에서 여기에 화이트밸런스 보정 코드 추가 */
+}
+
+/* 캔버스 이벤트 리스너 등록 (박스 모드용)
+   기존 핸들러와 충돌하지 않도록 박스 모드일 때만 동작 */
+(function attachBoxCanvasListeners(){
+  /* DOMContentLoaded 후 cvs가 준비되면 리스너 추가 */
+  function setupListeners(){
+    if(!cvs) return;
+    cvs.addEventListener('click', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+        if(handleBoxCanvasClick(e)) e.stopPropagation();
+      }
+    }, true); /* capture: true → 다른 핸들러보다 먼저 실행 */
+    cvs.addEventListener('mousedown', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+        if(handleBoxCanvasMouseDown(e)) e.stopPropagation();
+      }
+    }, true);
+    cvs.addEventListener('mousemove', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+        handleBoxCanvasMouseMove(e);
+      }
+    }, true);
+    cvs.addEventListener('mouseup', function(){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+        handleBoxCanvasMouseUp();
+      }
+    }, true);
+    /* 터치 이벤트 (모바일) */
+    cvs.addEventListener('touchstart', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box' && e.touches.length===1){
+        var t = e.touches[0];
+        var fakeE = {clientX:t.clientX, clientY:t.clientY};
+        if(boxReview.mode==='move'){
+          if(handleBoxCanvasMouseDown(fakeE)) e.preventDefault();
+        }
+      }
+    }, {passive: false});
+    cvs.addEventListener('touchmove', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box' && e.touches.length===1 && boxReview.dragIdx>=0){
+        var t = e.touches[0];
+        handleBoxCanvasMouseMove({clientX:t.clientX, clientY:t.clientY});
+        e.preventDefault();
+      }
+    }, {passive: false});
+    cvs.addEventListener('touchend', function(e){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+        if(boxReview.dragIdx>=0){
+          handleBoxCanvasMouseUp();
+        } else if(e.changedTouches.length===1 && (boxReview.mode==='add'||boxReview.mode==='delete')){
+          /* 터치 종료가 짧으면 클릭으로 처리 */
+          var t = e.changedTouches[0];
+          handleBoxCanvasClick({clientX:t.clientX, clientY:t.clientY});
+          e.preventDefault();
+        }
+      }
+    }, {passive: false});
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', setupListeners);
+  } else {
+    setupListeners();
+  }
+})();
 
 /* ── 파일 업로드 (2장 모드) ──
    [수정 2026-05-14 묶음2] dualPhotos에만 임시저장하던 것을 photos 배열에 정식 추가.
@@ -1481,6 +1934,7 @@ function selPhoto(i){
   if(tipEl){
     if(p.mode==='top') tipEl.innerHTML='🔴 <b>꼭지(상부)</b> 부위를 클릭 또는 드래그하세요.';
     else if(p.mode==='bottom') tipEl.innerHTML='🔵 <b>하부(꽃받침)</b> 부위를 클릭 또는 드래그하세요.';
+    else if(p.mode==='box') tipEl.innerHTML='📦 <b>박스 모드</b>: AI가 검출한 사과를 검토하세요 (위 검토 바 사용).';
     else tipEl.textContent='꼭지 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.';
   }
   /* ★ 사진별 저장된 GPS가 있으면 자동 복원 */
@@ -1520,6 +1974,38 @@ function redraw(){
   if(aIdx<0||!photos[aIdx]) return;
   var p=photos[aIdx];
   ctx.drawImage(p.img,0,0,cvs.width,cvs.height);
+  
+  /* 박스 모드: 검출된 사과 원 자동 표시 (5-4) */
+  if(p.mode==='box' && p.detectedApples && p.detectedApples.length>0){
+    var w=cvs.width, h=cvs.height;
+    for(var i=0; i<p.detectedApples.length; i++){
+      var a=p.detectedApples[i];
+      var cx=a.x*w, cy=a.y*h;
+      var r=a.r*Math.min(w,h);
+      ctx.beginPath();
+      ctx.arc(cx,cy,r,0,2*Math.PI);
+      ctx.strokeStyle='rgba(231,76,60,0.9)';
+      ctx.lineWidth=3;
+      ctx.stroke();
+      ctx.fillStyle='rgba(231,76,60,0.1)';
+      ctx.fill();
+      /* 번호 라벨 */
+      ctx.fillStyle='rgba(0,0,0,0.8)';
+      var num=String(i+1);
+      ctx.font='bold 11px Courier New,monospace';
+      var tw=ctx.measureText(num).width+10;
+      roundRect(ctx,cx-tw/2,cy-r-22,tw,18,4);
+      ctx.fill();
+      ctx.fillStyle='#fff';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(num,cx,cy-r-13);
+    }
+    ctx.textAlign='left';
+    ctx.textBaseline='alphabetic';
+    return; /* 박스 모드는 사과 마킹(polyD)을 안 함 */
+  }
+  
   for(var i=0;i<p.apples.length;i++){
     polyD(p.apples[i].roi,ACOLS[i%ACOLS.length],'#'+(i+1));
     if(p.apples[i].res){
@@ -2339,6 +2825,178 @@ function applyAddrResult(lat,lon,displayName){
   document.getElementById('gpsPhotoBtn').classList.add('on');
   toast('📍 위치 설정: '+displayName);
 }
+
+/* ════════════════════════════════════════════════════
+   AI 호출 추상화 계층 (5-2 작업)
+   ════════════════════════════════════════════════════
+   원칙:
+   1. 모든 AI 호출은 callAI() 통해서만 → 나중에 API 바꿀 때 이 함수만 수정
+   2. API 키는 localStorage 또는 환경변수에서 자동 로드
+   3. 응답은 표준 형식으로 변환 → 호출하는 쪽 코드 변경 불필요
+   4. 에러 발생 시 자동으로 폴백 (수동 모드 안내)
+   
+   현재 지원 프로바이더:
+   - anthropic: Claude Vision (기본)
+   향후 추가 가능: openai, google_gemini, custom (농진청 자체 API 등)
+   ════════════════════════════════════════════════════ */
+
+/* AI 설정 관리 — localStorage에 저장
+   userKey: 사용자가 직접 입력한 키 (우선 사용)
+   provider: 사용할 AI 회사 (현재는 anthropic만) */
+var AIConfig = {
+  PROVIDER_DEFAULT: 'anthropic',
+  MODEL_DEFAULTS: {
+    anthropic: 'claude-sonnet-4-20250514'
+    /* 향후: openai: 'gpt-4o', google: 'gemini-pro-vision' */
+  },
+  /* 현재 사용자 설정 가져오기 */
+  get: function(){
+    var raw=null;
+    try{raw=localStorage.getItem('fujigrade_ai_config');}catch(e){}
+    if(raw){
+      try{return JSON.parse(raw);}catch(e){}
+    }
+    return {provider:this.PROVIDER_DEFAULT, userKey:null, model:null};
+  },
+  /* 사용자 설정 저장 */
+  set: function(config){
+    try{localStorage.setItem('fujigrade_ai_config', JSON.stringify(config));}catch(e){}
+  },
+  /* 사용자 키 등록 (옵션) */
+  setUserKey: function(key){
+    var cfg=this.get();
+    cfg.userKey=key||null;
+    this.set(cfg);
+  },
+  /* 사용할 키 결정: 사용자 키 우선, 없으면 사이트 키 (Netlify 환경변수 - 빌드 시 주입) */
+  getActiveKey: function(){
+    var cfg=this.get();
+    if(cfg.userKey) return {key:cfg.userKey, source:'user'};
+    /* 사이트 키 (window.SITE_API_KEY는 build time에 주입되거나 별도 함수로 로드) */
+    if(typeof window.SITE_API_KEY!=='undefined'&&window.SITE_API_KEY){
+      return {key:window.SITE_API_KEY, source:'site'};
+    }
+    return {key:null, source:'none'};
+  }
+};
+
+/* ── 통합 AI 호출 함수 ──
+   모든 AI 호출은 이 함수 1개를 통해서만 진행
+   파라미터:
+     imageDataUrl: 압축된 이미지 (data:image/jpeg;base64,...)
+     prompt: AI에게 보낼 질문 (한국어 가능)
+     options: {maxTokens: 600, temperature: 0}
+   반환: Promise<{success, text, error, provider}> */
+function callAI(imageDataUrl, prompt, options){
+  options=options||{};
+  var cfg=AIConfig.get();
+  var keyInfo=AIConfig.getActiveKey();
+  
+  /* 키 없으면 즉시 실패 */
+  if(!keyInfo.key){
+    return Promise.resolve({
+      success:false,
+      text:null,
+      error:'API 키가 설정되지 않았습니다. 설정 화면에서 키를 입력하세요.',
+      provider:cfg.provider,
+      needsKey:true
+    });
+  }
+  
+  /* 프로바이더별 호출 분기 */
+  if(cfg.provider==='anthropic'){
+    return callAI_Anthropic(imageDataUrl, prompt, options, keyInfo.key, cfg.model||AIConfig.MODEL_DEFAULTS.anthropic);
+  }
+  /* 향후 추가:
+  if(cfg.provider==='openai') return callAI_OpenAI(...);
+  if(cfg.provider==='google') return callAI_Gemini(...);
+  if(cfg.provider==='custom') return callAI_Custom(...);  // 농진청 자체 API 등
+  */
+  
+  return Promise.resolve({success:false, text:null, error:'지원하지 않는 AI 프로바이더: '+cfg.provider, provider:cfg.provider});
+}
+
+/* Anthropic Claude 호출 (현재 구현체) */
+function callAI_Anthropic(imageDataUrl, prompt, options, apiKey, model){
+  var base64=imageDataUrl.split(',')[1];
+  var mimeType=imageDataUrl.split(';')[0].split(':')[1]||'image/jpeg';
+  
+  return fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key':apiKey,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:model,
+      max_tokens:options.maxTokens||600,
+      messages:[{
+        role:'user',
+        content:[
+          {type:'image',source:{type:'base64',media_type:mimeType,data:base64}},
+          {type:'text',text:prompt}
+        ]
+      }]
+    })
+  })
+  .then(function(r){
+    if(!r.ok){
+      return r.json().then(function(err){
+        throw new Error('API 오류 ('+r.status+'): '+(err.error&&err.error.message||r.statusText));
+      });
+    }
+    return r.json();
+  })
+  .then(function(d){
+    var txt=(d.content&&d.content[0]&&d.content[0].text)||'';
+    return {success:true, text:txt, error:null, provider:'anthropic', raw:d};
+  })
+  .catch(function(e){
+    return {success:false, text:null, error:e.message||'알 수 없는 오류', provider:'anthropic'};
+  });
+}
+
+/* AI 응답에서 JSON 추출 (모든 프로바이더 공통) */
+function parseAIJson(text){
+  if(!text) return null;
+  try{
+    /* 코드블록 제거 */
+    var clean=text.split('\x60\x60\x60').join('').trim();
+    /* JSON 부분만 추출 */
+    var match=clean.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    if(!match) return null;
+    return JSON.parse(match[0]);
+  }catch(e){
+    console.warn('[parseAIJson] JSON 파싱 실패:', e.message);
+    return null;
+  }
+}
+
+/* ── 설정 화면 (간이 모달) ── */
+function showAISettings(){
+  var cfg=AIConfig.get();
+  var current=cfg.userKey?'(사용자 키 등록됨)':(typeof window.SITE_API_KEY!=='undefined'&&window.SITE_API_KEY?'(사이트 키 사용 중)':'(키 없음)');
+  var key=prompt('Claude API 키 입력 (sk-ant-...)\n현재 상태: '+current+'\n\n• 입력 시 사용자 키로 저장\n• 빈 값 입력 시 사이트 키로 복귀\n• 취소 시 변경 없음', cfg.userKey||'');
+  if(key===null) return; /* 취소 */
+  if(key.trim()===''){
+    AIConfig.setUserKey(null);
+    toast('🔑 사용자 키 제거됨. 사이트 키로 복귀.');
+  } else {
+    if(!key.startsWith('sk-ant-')){
+      if(!confirm('Claude API 키는 보통 "sk-ant-"로 시작합니다. 그래도 저장할까요?')) return;
+    }
+    AIConfig.setUserKey(key.trim());
+    toast('🔑 사용자 API 키 저장됨');
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   기존 호출처는 이제 callAI()를 사용하도록 점진 마이그레이션
+   (5-3에서 박스 모드 AI 검출이 새로 callAI를 사용)
+   기존 extractGPSFromImage, scanWithClaudeVision는 호환 유지
+   ════════════════════════════════════════════════════ */
 
 /* ── EXIF + Claude Vision ── */
 function usePhotoGPS(){

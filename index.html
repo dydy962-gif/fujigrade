@@ -626,11 +626,10 @@ function hideKreiSplash(){
 
       <!-- 촬영 모드 선택 (항목11) -->
       <div class="section-label">촬영 방식 선택</div>
-      <div class="mode-select" style="grid-template-columns:repeat(4,1fr);gap:6px">
+      <div class="mode-select" style="grid-template-columns:repeat(3,1fr);gap:6px">
         <button class="mode-btn on" id="modeTop" onclick="setPhotoMode('top')">🍎 꼭지만<br><span style="font-size:10px;opacity:.7">상부 촬영</span></button>
         <button class="mode-btn" id="modeBottom" onclick="setPhotoMode('bottom')">🔵 하부만<br><span style="font-size:10px;opacity:.7">꽃받침 촬영</span></button>
-        <button class="mode-btn" id="modeBoth" onclick="setPhotoMode('both')">📸 상+하부<br><span style="font-size:10px;opacity:.7">2장 종합</span></button>
-        <button class="mode-btn" id="modeBox" onclick="setPhotoMode('box')" style="border-color:rgba(140,196,74,.4)">📦 박스<br><span style="font-size:10px;opacity:.7">난좌 다수</span></button>
+        <button class="mode-btn" id="modeBoth" onclick="setPhotoMode('both')">📸 꼭지+하부<br><span style="font-size:10px;opacity:.7">2장 종합 (60:40)</span></button>
       </div>
 
       <!-- 2장 모드 안내 -->
@@ -1444,24 +1443,24 @@ var cvs=document.getElementById('cvs');
 var ctx=cvs.getContext('2d');
 
 function setPhotoMode(m){
+  /* box 모드는 더 이상 없음 — top/bottom으로 폴백 */
+  if(m==='box') m='top';
   photoMode=m;
   document.getElementById('modeTop').className='mode-btn'+(m==='top'?' on':'');
   document.getElementById('modeBottom').className='mode-btn'+(m==='bottom'?' on':'');
   document.getElementById('modeBoth').className='mode-btn'+(m==='both'?' on':'');
-  document.getElementById('modeBox').className='mode-btn'+(m==='box'?' on':'');
   /* 안내 박스 */
-  document.getElementById('dualModeInfo').className='dual-mode-info'+(m==='both'?' show':'');
-  document.getElementById('boxModeInfo').className='dual-mode-info'+(m==='box'?' show':'');
-  /* 업로드 영역 전환 (5-1 작업: 박스 모드 추가) */
-  document.getElementById('uploadAreaSingle').style.display=(m==='both'||m==='box')?'none':'block';
+  var dInfo=document.getElementById('dualModeInfo');
+  if(dInfo) dInfo.className='dual-mode-info'+(m==='both'?' show':'');
+  var bInfo=document.getElementById('boxModeInfo');
+  if(bInfo) bInfo.style.display='none';
+  /* 업로드 영역 전환 */
+  document.getElementById('uploadAreaSingle').style.display=(m==='both')?'none':'block';
   document.getElementById('uploadAreaDual').style.display=m==='both'?'block':'none';
-  document.getElementById('uploadAreaBox').style.display=m==='box'?'block':'none';
-  /* 박스 모드는 마킹 버튼 라벨 다름 */
-  if(m==='box'){
-    document.getElementById('bMark').textContent='🍎 사과 마킹';
-  } else {
-    document.getElementById('bMark').textContent=(m==='bottom')?'🔵 하부 마킹':'🔴 꼭지 마킹';
-  }
+  var bArea=document.getElementById('uploadAreaBox');
+  if(bArea) bArea.style.display='none';
+  /* 마킹 버튼 라벨 — SAM3 자동 검출이므로 안내용 */
+  document.getElementById('bMark').textContent=(m==='bottom')?'🔵 하부 영역':'🔴 꼭지 영역';
 }
 
 /* ── 파일 업로드 (단일 모드) ── */
@@ -2661,28 +2660,28 @@ function saveBoxImg(){
   function setupListeners(){
     if(!cvs) return;
     cvs.addEventListener('click', function(e){
-      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].detectedApples){
         if(handleBoxCanvasClick(e)) e.stopPropagation();
       }
     }, true); /* capture: true → 다른 핸들러보다 먼저 실행 */
     cvs.addEventListener('mousedown', function(e){
-      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].detectedApples){
         if(handleBoxCanvasMouseDown(e)) e.stopPropagation();
       }
     }, true);
     cvs.addEventListener('mousemove', function(e){
-      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].detectedApples){
         handleBoxCanvasMouseMove(e);
       }
     }, true);
     cvs.addEventListener('mouseup', function(){
-      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].detectedApples){
         handleBoxCanvasMouseUp();
       }
     }, true);
     /* 터치 이벤트 (모바일) */
     cvs.addEventListener('touchstart', function(e){
-      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box' && e.touches.length===1){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].detectedApples && e.touches.length===1){
         var t = e.touches[0];
         var fakeE = {clientX:t.clientX, clientY:t.clientY};
         if(boxReview.mode==='move'){
@@ -2691,14 +2690,14 @@ function saveBoxImg(){
       }
     }, {passive: false});
     cvs.addEventListener('touchmove', function(e){
-      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box' && e.touches.length===1 && boxReview.dragIdx>=0){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].detectedApples && e.touches.length===1 && boxReview.dragIdx>=0){
         var t = e.touches[0];
         handleBoxCanvasMouseMove({clientX:t.clientX, clientY:t.clientY});
         e.preventDefault();
       }
     }, {passive: false});
     cvs.addEventListener('touchend', function(e){
-      if(aIdx>=0 && photos[aIdx] && photos[aIdx].mode==='box'){
+      if(aIdx>=0 && photos[aIdx] && photos[aIdx].detectedApples){
         if(boxReview.dragIdx>=0){
           handleBoxCanvasMouseUp();
         } else if(e.changedTouches.length===1 && (boxReview.mode==='add'||boxReview.mode==='delete')){
@@ -2758,24 +2757,54 @@ function onDualFile(files,side){
 }
 
 function addPhoto(file){
-  /* [2026-05-15 수정] processImageFile로 통합 처리
-     EXIF 회전 보정 + 1568px 압축 → AI 인식률 대폭 향상 */
+  /* [2026-05-16 수정] 모든 모드(top/bottom/both)에서 SAM3 자동 검출
+     박스 모드를 흡수 — 사용자가 탭으로 꼭지/하부만 선택
+     이미지 처리 + EXIF GPS 추출 + SAM3 검출 */
   processImageFile(file, function(result){
     var idx=photos.length;
     var obj={
       img:result.displayImg,
-      url:result.displayUrl,          /* 표시·색분석용 (회전 보정됨) */
-      compressedUrl:result.compressedUrl,  /* AI Vision API용 (1568px) */
-      file:file,                      /* 원본 (EXIF GPS 추출용) */
-      apples:[],cardRs:{},res:null,mode:photoMode,
+      url:result.displayUrl,
+      compressedUrl:result.compressedUrl,
+      file:file,
+      apples:[],cardRs:{},res:null,
+      /* mode는 photoMode 그대로 (top/bottom/both) — 결과 라벨용 */
+      mode:photoMode,
       orientation:result.orientation,
       origSize:result.origSize,
-      displaySize:result.displaySize
+      displaySize:result.displaySize,
+      /* SAM3 검출 필드 (이전 박스 모드에서 흡수) */
+      aiAnalysis:null,
+      trayAvgRGB:null,
+      correctedCanvas:null,
+      correctedUrl:null,
+      wbCorrection:null,
+      wbCorrected:false,
+      analysisCanvas:null,
+      detectedApples:null,
+      boxResult:null
     };
     photos.push(obj);
     renderPhotoGrid();
     selPhoto(idx);
-    autoScanPhoto(obj,idx);
+    /* EXIF GPS 먼저 추출 (주소/날씨용) */
+    if(obj.file){
+      extractEXIF(obj.file,function(lat,lon){
+        if(lat&&lon){
+          obj.gps={lat:lat,lon:lon,source:'EXIF',address:null};
+          obj.gpsScanned=true;
+          if(idx===aIdx) applyGPS(lat,lon,'사진 EXIF');
+          toast('📍 사진 #'+(idx+1)+' EXIF GPS 인식');
+        }
+        /* GPS 유무와 상관없이 SAM3 검출 시작 */
+        toast('🤖 사진 #'+(idx+1)+' SAM3 분석 시작');
+        setTimeout(function(){
+          detectApplesInBox(obj, idx);
+        }, 300);
+      });
+    } else {
+      setTimeout(function(){ detectApplesInBox(obj, idx); }, 300);
+    }
   });
 }
 
@@ -2820,10 +2849,14 @@ function selPhoto(i){
   /* ★ 마킹 안내 메시지를 사진 모드에 맞춰 변경 */
   var tipEl=document.getElementById('markTipText');
   if(tipEl){
-    if(p.mode==='top') tipEl.innerHTML='🔴 <b>꼭지(상부)</b> 부위를 클릭 또는 드래그하세요.';
-    else if(p.mode==='bottom') tipEl.innerHTML='🔵 <b>하부(꽃받침)</b> 부위를 클릭 또는 드래그하세요.';
-    else if(p.mode==='box') tipEl.innerHTML='📦 <b>박스 모드</b>: AI가 검출한 사과를 검토하세요 (위 검토 바 사용).';
-    else tipEl.textContent='꼭지 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.';
+    if(p.detectedApples && p.detectedApples.length>0){
+      var modeName = p.mode==='bottom' ? '하부(꽃받침)' : (p.mode==='both' ? '꼭지/하부' : '꼭지(상부)');
+      tipEl.innerHTML='🤖 <b>SAM3 자동 검출 완료</b> ('+modeName+'). 잘못 검출된 사과는 위 검토 바에서 삭제하세요.';
+    } else {
+      if(p.mode==='top') tipEl.innerHTML='🔴 <b>꼭지(상부)</b> 사진 분석 중...';
+      else if(p.mode==='bottom') tipEl.innerHTML='🔵 <b>하부(꽃받침)</b> 사진 분석 중...';
+      else tipEl.textContent='AI가 사과를 자동 검출합니다.';
+    }
   }
   /* ★ 사진별 저장된 GPS가 있으면 자동 복원 */
   if(p.gps && p.gps.lat && p.gps.lon){
@@ -2864,7 +2897,7 @@ function redraw(){
   ctx.drawImage(p.img,0,0,cvs.width,cvs.height);
   
   /* 박스 모드: SAM3 폴리곤 표시 (재설계 2026-05-15) */
-  if(p.mode==='box' && p.detectedApples && p.detectedApples.length>0){
+  if(p.detectedApples && p.detectedApples.length>0){
     var w=cvs.width, h=cvs.height;
     
     /* 각 사과의 폴리곤을 반투명 빨강으로 칠하기 */

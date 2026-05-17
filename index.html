@@ -922,6 +922,59 @@ function hideKreiSplash(){
 <!-- 기록 탭 (항목9) -->
 <div id="page-records" class="page">
   <div class="records-wrap">
+
+    <!-- ════════════════════════════════════════════════════
+         평균내기 서브섹션 (2026-05-17 추가)
+         상부/하부 사진 그룹별 가중평균 계산
+         ════════════════════════════════════════════════════ -->
+    <div style="background:linear-gradient(135deg,rgba(140,196,74,.08),rgba(140,196,74,.02));border:1px solid rgba(140,196,74,.25);border-radius:var(--rl);padding:16px;margin-bottom:24px">
+      <h3 style="font-size:15px;color:var(--accent);margin-bottom:4px">🧮 평균내기 — 상부/하부 가중평균</h3>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">기간을 정하고 상부·하부 사진을 선택해서 후지 표준 가중평균(상부 60 : 하부 40)으로 최종 등급을 산출합니다.</div>
+
+      <!-- 기간 선택 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px">시작일</label>
+          <input type="date" id="avgFromDate" style="width:100%;padding:8px;background:var(--bg2);border:1px solid var(--border);color:var(--cream);border-radius:6px;font-family:var(--mm);font-size:12px">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px">종료일</label>
+          <input type="date" id="avgToDate" style="width:100%;padding:8px;background:var(--bg2);border:1px solid var(--border);color:var(--cream);border-radius:6px;font-family:var(--mm);font-size:12px">
+        </div>
+      </div>
+
+      <!-- 사진 모드 선택 -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px">
+          <input type="checkbox" id="avgIncludeTop" checked style="margin:0">
+          <span>🔴 상부 포함</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px">
+          <input type="checkbox" id="avgIncludeBottom" checked style="margin:0">
+          <span>🔵 하부 포함</span>
+        </label>
+      </div>
+
+      <!-- 가중치 슬라이더 -->
+      <div style="background:var(--bg2);padding:12px;border-radius:6px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">가중치 설정</span>
+          <span style="font-size:10px;color:var(--muted);font-style:italic">후지 표준: 상부 60 (꼭지 부분이 등급 결정에 더 큰 영향)</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:12px;color:#ff8b8b;font-weight:600;min-width:50px">상부 <span id="avgTopVal">60</span>%</span>
+          <input type="range" id="avgWeightSlider" min="0" max="100" value="60" step="5" oninput="updateAvgWeight()" style="flex:1">
+          <span style="font-size:12px;color:#64b5f6;font-weight:600;min-width:50px;text-align:right">하부 <span id="avgBottomVal">40</span>%</span>
+        </div>
+      </div>
+
+      <!-- 계산 버튼 -->
+      <button onclick="calculateWeightedAverage()" style="width:100%;padding:12px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer">📊 평균 계산</button>
+
+      <!-- 결과 표시 영역 -->
+      <div id="avgResultPanel" style="margin-top:14px;display:none"></div>
+    </div>
+
     <div class="section-label" style="margin-bottom:10px">지역별 기록</div>
     <div class="rec-region-tabs" id="recRegionTabs"></div>
     <div id="recContent">
@@ -2613,7 +2666,11 @@ function saveBoxResult(){
       gradeCounts: r.gradeCounts,
       individual: r.apples
     },
-    weather: null
+    weather: null,
+    /* ★ 2026-05-17 추가: 상부/하부 구분 (평균내기용)
+       p.mode가 'top'/'bottom'/'both' 중 하나
+       'both'는 사용 안 함(현재 코드 흐름상 상부 또는 하부 둘 중 하나로 분류) */
+    photoMode: p.mode || 'top'
   };
   
   records.push(record);
@@ -4455,6 +4512,225 @@ function loadAllRecords(){
 }
 function saveAllRecords(records){
   try{localStorage.setItem('fujigrade_records',JSON.stringify(records));}catch(e){}
+}
+
+/* ════════════════════════════════════════════════════
+   평균내기 — 상부/하부 가중평균 계산 (2026-05-17 추가)
+   ════════════════════════════════════════════════════
+   흐름:
+   1. 기록에서 기간 + 상부/하부 필터로 필터링
+   2. 상부 사진들 평균 착색률, 하부 사진들 평균 착색률 산출
+   3. 슬라이더 가중치로 최종 가중평균 계산
+   4. 표본 불균형(30% 이상 차이) 시 노란 경고
+   ════════════════════════════════════════════════════ */
+
+/* 슬라이더 갱신 — 상부 X% → 하부 자동 (100-X)% */
+function updateAvgWeight(){
+  var slider = document.getElementById('avgWeightSlider');
+  if(!slider) return;
+  var topW = parseInt(slider.value, 10);
+  var botW = 100 - topW;
+  var topEl = document.getElementById('avgTopVal');
+  var botEl = document.getElementById('avgBottomVal');
+  if(topEl) topEl.textContent = topW;
+  if(botEl) botEl.textContent = botW;
+}
+
+/* 평균 계산 — 메인 함수 */
+function calculateWeightedAverage(){
+  var fromDate = document.getElementById('avgFromDate').value;
+  var toDate = document.getElementById('avgToDate').value;
+  var includeTop = document.getElementById('avgIncludeTop').checked;
+  var includeBottom = document.getElementById('avgIncludeBottom').checked;
+  var topWeight = parseInt(document.getElementById('avgWeightSlider').value, 10);
+  var botWeight = 100 - topWeight;
+
+  /* 입력 검증 */
+  if(!includeTop && !includeBottom){
+    toast('⚠ 상부 또는 하부 중 최소 하나는 선택해야 합니다');
+    return;
+  }
+
+  /* 전체 기록 로드 후 필터링 */
+  var allRecords = loadAllRecords();
+  if(allRecords.length === 0){
+    showAvgResult({error: '저장된 기록이 없습니다. 측정 후 기록에 저장해주세요.'});
+    return;
+  }
+
+  /* 기간 필터 (입력 없으면 전체 기간) */
+  var filtered = allRecords.filter(function(r){
+    if(!r.date) return false;
+    if(fromDate && r.date < fromDate) return false;
+    if(toDate && r.date > toDate) return false;
+    return true;
+  });
+
+  if(filtered.length === 0){
+    showAvgResult({error: '선택한 기간에 저장된 기록이 없습니다.'});
+    return;
+  }
+
+  /* 상부/하부 그룹 분리 — photoMode 필드가 없는 옛 기록은 'top'으로 간주(하위호환) */
+  var topRecords = filtered.filter(function(r){
+    var m = r.photoMode || 'top';
+    return m === 'top';
+  });
+  var botRecords = filtered.filter(function(r){
+    return r.photoMode === 'bottom';
+  });
+
+  /* 체크박스에 따른 포함 여부 */
+  if(!includeTop) topRecords = [];
+  if(!includeBottom) botRecords = [];
+
+  if(topRecords.length === 0 && botRecords.length === 0){
+    showAvgResult({error: '선택한 조건에 맞는 기록이 없습니다. 체크박스나 기간을 확인하세요.'});
+    return;
+  }
+
+  /* 그룹별 평균 계산 — pct는 record 안에 이미 사진별 평균 착색률로 저장됨 */
+  var topAvg = null, botAvg = null;
+  if(topRecords.length > 0){
+    var sumT = 0;
+    for(var i = 0; i < topRecords.length; i++) sumT += topRecords[i].pct;
+    topAvg = sumT / topRecords.length;
+  }
+  if(botRecords.length > 0){
+    var sumB = 0;
+    for(var i = 0; i < botRecords.length; i++) sumB += botRecords[i].pct;
+    botAvg = sumB / botRecords.length;
+  }
+
+  /* 가중평균 계산
+     - 둘 다 있으면 (topAvg × topW + botAvg × botW) / 100
+     - 한쪽만 있으면 그쪽 평균 그대로 사용 */
+  var finalAvg;
+  if(topAvg !== null && botAvg !== null){
+    finalAvg = (topAvg * topWeight + botAvg * botWeight) / 100;
+  } else if(topAvg !== null){
+    finalAvg = topAvg;
+  } else {
+    finalAvg = botAvg;
+  }
+  finalAvg = Math.round(finalAvg * 10) / 10;
+
+  /* 표본 불균형 체크 — 양쪽 모두 5장 이상일 때만 의미있음
+     작은 표본(1~4장)은 평균 자체가 흔들리므로 불균형 경고가 무의미
+     큰 쪽 대비 작은 쪽이 70% 미만이면 경고 (= 30% 이상 차이) */
+  var imbalanceWarn = false;
+  if(topRecords.length >= 5 && botRecords.length >= 5){
+    var maxN = Math.max(topRecords.length, botRecords.length);
+    var minN = Math.min(topRecords.length, botRecords.length);
+    if(minN / maxN < 0.7) imbalanceWarn = true;
+  }
+
+  var finalCard = getCard(finalAvg);
+  var finalStage = getNradStage(finalAvg, currentVariety);
+
+  showAvgResult({
+    finalAvg: finalAvg,
+    finalGrade: finalCard.l,
+    finalGradeName: finalCard.name,
+    finalGradeColor: finalCard.color,
+    finalStage: finalStage,
+    topAvg: topAvg !== null ? Math.round(topAvg * 10) / 10 : null,
+    botAvg: botAvg !== null ? Math.round(botAvg * 10) / 10 : null,
+    topCount: topRecords.length,
+    botCount: botRecords.length,
+    topWeight: topWeight,
+    botWeight: botWeight,
+    imbalanceWarn: imbalanceWarn,
+    fromDate: fromDate || '전체',
+    toDate: toDate || '전체'
+  });
+}
+
+/* 평균 결과 화면 렌더링 */
+function showAvgResult(data){
+  var panel = document.getElementById('avgResultPanel');
+  if(!panel) return;
+  panel.style.display = 'block';
+
+  /* 에러 케이스 */
+  if(data.error){
+    panel.innerHTML = '<div style="padding:14px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);border-radius:6px;color:#ff8b8b;font-size:13px">⚠ ' + data.error + '</div>';
+    return;
+  }
+
+  var html = '';
+
+  /* 표본 불균형 경고 (있을 때만) */
+  if(data.imbalanceWarn){
+    html += '<div style="padding:10px 12px;background:rgba(232,160,32,.12);border:1px solid rgba(232,160,32,.4);border-radius:6px;margin-bottom:12px;font-size:12px;color:#e8a020;line-height:1.5">' +
+      '⚠ <b>표본 불균형</b> — 상부(' + data.topCount + '장)와 하부(' + data.botCount + '장) 장수 차이가 30% 이상입니다. 결과 해석에 주의하세요.' +
+      '</div>';
+  }
+
+  /* 최종 등급 카드 */
+  html += '<div style="background:linear-gradient(135deg,rgba(0,0,0,.4),rgba(0,0,0,.25));padding:18px;border-radius:8px;text-align:center;margin-bottom:12px;border:1px solid ' + data.finalGradeColor + '40">' +
+    '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">최종 가중평균</div>' +
+    '<div style="font-size:42px;font-weight:700;color:' + data.finalGradeColor + ';line-height:1">' + data.finalAvg + '<span style="font-size:20px;opacity:.7">%</span></div>' +
+    '<div style="font-size:14px;color:var(--cream);margin-top:6px;font-weight:600">' + data.finalGrade + ' — ' + data.finalGradeName + '</div>' +
+    '</div>';
+
+  /* 농진청 단계 (있으면) */
+  if(data.finalStage){
+    html += '<div style="background:rgba(140,196,74,.08);border:1px solid rgba(140,196,74,.2);border-radius:6px;padding:10px 12px;margin-bottom:12px">' +
+      '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">🌾 농촌진흥청 단계</div>' +
+      '<div style="font-size:13px;font-weight:600;color:var(--cream);margin-bottom:3px">' + data.finalStage.stage + '</div>' +
+      '<div style="font-size:11px;color:var(--muted)">💡 ' + data.finalStage.advice + '</div>' +
+      '</div>';
+  }
+
+  /* 그룹별 상세 */
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+
+  /* 상부 카드 */
+  if(data.topAvg !== null){
+    html += '<div style="background:rgba(255,139,139,.08);border:1px solid rgba(255,139,139,.25);padding:12px;border-radius:6px">' +
+      '<div style="font-size:10px;color:#ff8b8b;font-weight:600;margin-bottom:4px">🔴 상부 (가중치 ' + data.topWeight + '%)</div>' +
+      '<div style="font-size:20px;font-weight:700;color:var(--cream)">' + data.topAvg + '%</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:2px">사진 ' + data.topCount + '장 평균</div>' +
+      '</div>';
+  } else {
+    html += '<div style="background:rgba(255,255,255,.03);border:1px dashed var(--border);padding:12px;border-radius:6px;opacity:.5">' +
+      '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">🔴 상부</div>' +
+      '<div style="font-size:14px;color:var(--muted)">데이터 없음</div>' +
+      '</div>';
+  }
+
+  /* 하부 카드 */
+  if(data.botAvg !== null){
+    html += '<div style="background:rgba(100,181,246,.08);border:1px solid rgba(100,181,246,.25);padding:12px;border-radius:6px">' +
+      '<div style="font-size:10px;color:#64b5f6;font-weight:600;margin-bottom:4px">🔵 하부 (가중치 ' + data.botWeight + '%)</div>' +
+      '<div style="font-size:20px;font-weight:700;color:var(--cream)">' + data.botAvg + '%</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:2px">사진 ' + data.botCount + '장 평균</div>' +
+      '</div>';
+  } else {
+    html += '<div style="background:rgba(255,255,255,.03);border:1px dashed var(--border);padding:12px;border-radius:6px;opacity:.5">' +
+      '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">🔵 하부</div>' +
+      '<div style="font-size:14px;color:var(--muted)">데이터 없음</div>' +
+      '</div>';
+  }
+  html += '</div>';
+
+  /* 계산식 메모 */
+  var formula = '';
+  if(data.topAvg !== null && data.botAvg !== null){
+    formula = '(' + data.topAvg + '% × ' + data.topWeight + '% + ' + data.botAvg + '% × ' + data.botWeight + '%) / 100 = ' + data.finalAvg + '%';
+  } else if(data.topAvg !== null){
+    formula = '상부만 평균: ' + data.topAvg + '% (하부 데이터 없음)';
+  } else {
+    formula = '하부만 평균: ' + data.botAvg + '% (상부 데이터 없음)';
+  }
+
+  html += '<div style="background:var(--bg2);padding:10px 12px;border-radius:6px;font-family:var(--mm);font-size:10px;color:var(--muted);line-height:1.6">' +
+    '<div style="margin-bottom:4px">📅 기간: ' + data.fromDate + ' ~ ' + data.toDate + '</div>' +
+    '<div>📐 계산식: ' + formula + '</div>' +
+    '</div>';
+
+  panel.innerHTML = html;
 }
 
 function initKoreaMap(){

@@ -627,14 +627,14 @@ function hideKreiSplash(){
       <!-- 촬영 모드 선택 (항목11) -->
       <div class="section-label">촬영 방식 선택</div>
       <div class="mode-select" style="grid-template-columns:repeat(3,1fr);gap:6px">
-        <button class="mode-btn on" id="modeTop" onclick="setPhotoMode('top')">🍎 꼭지만<br><span style="font-size:10px;opacity:.7">상부 촬영</span></button>
+        <button class="mode-btn on" id="modeTop" onclick="setPhotoMode('top')">🍎 상부만<br><span style="font-size:10px;opacity:.7">상부 촬영</span></button>
         <button class="mode-btn" id="modeBottom" onclick="setPhotoMode('bottom')">🔵 하부만<br><span style="font-size:10px;opacity:.7">꽃받침 촬영</span></button>
-        <button class="mode-btn" id="modeBoth" onclick="setPhotoMode('both')">📸 꼭지+하부<br><span style="font-size:10px;opacity:.7">2장 종합 (60:40)</span></button>
+        <button class="mode-btn" id="modeBoth" onclick="setPhotoMode('both')">📸 상부+하부<br><span style="font-size:10px;opacity:.7">2장 종합 (60:40)</span></button>
       </div>
 
       <!-- 2장 모드 안내 -->
       <div class="dual-mode-info" id="dualModeInfo">
-        📸 2장 모드: 꼭지(상부) 사진과 하부(꽃받침) 사진을 각각 업로드하면 두 부위를 종합하여 착색률을 산출합니다. 꼭지 가중치 60%, 하부 가중치 40% 적용.
+        📸 2장 모드: 상부 사진과 하부(꽃받침) 사진을 각각 업로드하면 두 부위를 종합하여 착색률을 산출합니다. 상부 가중치 60%, 하부 가중치 40% 적용.
       </div>
 
       <!-- 박스 모드 안내 (5-1 작업) -->
@@ -658,7 +658,7 @@ function hideKreiSplash(){
           <div class="upload-btn">
             <input type="file" id="fileTop" accept="image/*" onchange="onDualFile(this.files,'top')">
             <div class="up-icon">🔴</div>
-            <div class="up-title">꼭지 (상부)</div>
+            <div class="up-title">상부</div>
             <div class="up-sub" id="topStatus">미업로드</div>
           </div>
           <div class="upload-btn" style="border-color:rgba(100,181,246,.3);background:rgba(100,181,246,.04)">
@@ -702,9 +702,9 @@ function hideKreiSplash(){
       <!-- 캔버스 -->
       <div id="cvs-wrap">
         <canvas id="cvs"></canvas>
-        <div class="mark-tip">💡 <span id="markTipText">꼭지 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.</span></div>
+        <div class="mark-tip">💡 <span id="markTipText">상부 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.</span></div>
         <div class="toolbar">
-          <button class="tb mark-on" id="bMark" onclick="setMode('mark')">🔴 꼭지 마킹</button>
+          <button class="tb mark-on" id="bMark" onclick="setMode('mark')">🔴 상부 마킹</button>
           <button class="tb" id="bCard" onclick="setMode('card')">🎯 카드 영역</button>
           <button class="tb" onclick="undoMark()">↩</button>
           <button class="tb" onclick="clearMarks()">🗑</button>
@@ -852,10 +852,10 @@ function hideKreiSplash(){
 
       <div class="empty-state" id="emptyState">
         <div class="empty-icon">🍎</div>
-        <div style="font-size:13px;color:var(--muted)">사진을 업로드하고<br>꼭지를 마킹한 뒤<br>판정을 실행하세요</div>
+        <div style="font-size:13px;color:var(--muted)">사진을 업로드하고<br>상부를 마킹한 뒤<br>판정을 실행하세요</div>
         <div class="step-list">
-          <div class="step-item"><div class="step-dot">1</div><span>촬영 방식 선택 (꼭지/하부/2장)</span></div>
-          <div class="step-item"><div class="step-dot">2</div><span>🔴 꼭지 부위 클릭 또는 드래그</span></div>
+          <div class="step-item"><div class="step-dot">1</div><span>촬영 방식 선택 (상부/하부/2장)</span></div>
+          <div class="step-item"><div class="step-dot">2</div><span>🔴 상부 부위 클릭 또는 드래그</span></div>
           <div class="step-item"><div class="step-dot">3</div><span>▶ 판정 실행</span></div>
         </div>
       </div>
@@ -875,7 +875,7 @@ function hideKreiSplash(){
           <div class="section-label">측정값</div>
           <div class="meas-cell">
             <div>
-              <div class="meas-lbl" id="measLabel">🔴 꼭지 (평균)</div>
+              <div class="meas-lbl" id="measLabel">🔴 상부 (평균)</div>
               <div class="meas-lab" id="measLab">—</div>
             </div>
             <div class="meas-pct" id="measPct">—</div>
@@ -905,7 +905,7 @@ function hideKreiSplash(){
           <div id="nradAdvice" style="font-size:11px;color:var(--muted);line-height:1.5">—</div>
         </div>
 
-        <div class="footnote" id="footnoteBase">기준: 농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=−5.7→0%, a*=+38.8→100%). 꼭지 부위 기준.</div>
+        <div class="footnote" id="footnoteBase">기준: 농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=−5.7→0%, a*=+38.8→100%). 상부 부위 기준.</div>
 
         <div class="share-bar">
           <button class="s-btn save" id="saveResultBtn" onclick="onSaveResultClick()" style="background:var(--accent);color:var(--bg);font-weight:600">💾 결과 저장</button>
@@ -1138,14 +1138,14 @@ function hideKreiSplash(){
       </div>
     </div>
 
-    <!-- 4. 가중치 (꼭지/하부) -->
+    <!-- 4. 가중치 (상부/하부) -->
     <div style="background:rgba(0,0,0,.25);border-radius:var(--r);padding:12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
         <span style="color:#e8a020;font-size:11px;font-weight:600">◆ 연구 기반 추정</span>
-        <span style="font-size:12px;color:var(--cream);font-weight:600">4. 꼭지 60% + 하부 40% 가중치</span>
+        <span style="font-size:12px;color:var(--cream);font-weight:600">4. 상부 60% + 하부 40% 가중치</span>
       </div>
       <div style="font-size:11px;color:var(--cream);line-height:1.7;padding-left:8px;border-left:2px solid #e8a020">
-        <b>적용 공식</b>: 종합 착색률 = (꼭지 착색률 × 0.6) + (하부 착색률 × 0.4)<br>
+        <b>적용 공식</b>: 종합 착색률 = (상부 착색률 × 0.6) + (하부 착색률 × 0.4)<br>
         <b>근거</b>: Han et al. (2022) PMC 「봉지 제거 후 착색」 연구 — 꼭지부가 적도부·배꼽부보다 착색이 늦어 수확 적기 판정에 더 결정적임. Wang et al. (2021) — 착색 순서가 적도부 → 꼭지·배꼽 순으로 진행.<br>
         <b>주의</b>: 정확한 60:40 비율을 제시한 논문은 없음. 위 연구 결과를 종합해 본 프로젝트가 임의 설정. 표준 공식이 발표되면 갱신 예정.
       </div>
@@ -1300,7 +1300,7 @@ function hideKreiSplash(){
    한국농촌경제연구원 — 후지사과 착색 판정 웹앱
    변경: Grade탭 G5→G1 재배열, 남한지도 정확좌표,
    주소입력(읍면동), 날씨2주평균요약, 원인분석삭제,
-   꼭지+하부 2장모드, 기록탭
+   상부+하부 2장모드, 기록탭
 ════════════════════════════════════════════════ */
 
 /* ── 품종별 판정 기준 (7번+8번 작업) ──
@@ -1460,7 +1460,7 @@ function setPhotoMode(m){
   var bArea=document.getElementById('uploadAreaBox');
   if(bArea) bArea.style.display='none';
   /* 마킹 버튼 라벨 — SAM3 자동 검출이므로 안내용 */
-  document.getElementById('bMark').textContent=(m==='bottom')?'🔵 하부 영역':'🔴 꼭지 영역';
+  document.getElementById('bMark').textContent=(m==='bottom')?'🔵 하부 영역':'🔴 상부 영역';
 }
 
 /* ── 파일 업로드 (단일 모드) ── */
@@ -2079,7 +2079,7 @@ function findAppleAt(photoObj, nx, ny){
 
 /* 캔버스 클릭 → 모드에 따라 분기 (마우스다운 직후 클릭) */
 function handleBoxCanvasClick(e){
-  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return false;
+  if(aIdx<0||!photos[aIdx]) return false;
   var p = photos[aIdx];
   if(!p.detectedApples) return false;
   
@@ -2125,7 +2125,7 @@ function handleBoxCanvasClick(e){
 
 /* 캔버스 마우스다운 (move 모드용) */
 function handleBoxCanvasMouseDown(e){
-  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return false;
+  if(aIdx<0||!photos[aIdx]) return false;
   if(boxReview.mode!=='move') return false;
   var p = photos[aIdx];
   if(!p.detectedApples) return false;
@@ -2151,7 +2151,7 @@ function handleBoxCanvasMouseDown(e){
 
 /* 캔버스 마우스이동 (드래그) */
 function handleBoxCanvasMouseMove(e){
-  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return false;
+  if(aIdx<0||!photos[aIdx]) return false;
   if(boxReview.dragIdx<0) return false;
   var p = photos[aIdx];
   
@@ -2179,7 +2179,7 @@ function handleBoxCanvasMouseUp(){
 
 /* AI 재검출 */
 function rerunBoxDetection(){
-  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box'){
+  if(aIdx<0||!photos[aIdx]){
     toast('박스 모드 사진이 없습니다');
     return;
   }
@@ -2194,7 +2194,9 @@ function rerunBoxDetection(){
    각 사과 영역의 LAB a* 측정 → 등급 → 평균 착색률
    ──────────────────────────────────────────────────── */
 function startBoxColorCorrection(){
-  if(aIdx<0||!photos[aIdx]||photos[aIdx].mode!=='box') return;
+  /* [2026-05-16 수정] mode==='box' 체크 제거
+     모든 모드(top/bottom/both)에서 SAM3 자동 검출 사용 */
+  if(aIdx<0||!photos[aIdx]) return;
   var p = photos[aIdx];
   if(!p.detectedApples || p.detectedApples.length===0){
     toast('검출된 사과가 없습니다');
@@ -2718,7 +2720,7 @@ function saveBoxImg(){
 
 /* ── 파일 업로드 (2장 모드) ──
    [수정 2026-05-14 묶음2] dualPhotos에만 임시저장하던 것을 photos 배열에 정식 추가.
-   사용자는 사진 그리드에서 꼭지/하부 사이를 전환하며 각각 마킹.
+   사용자는 사진 그리드에서 상부/하부 사이를 전환하며 각각 마킹.
    판정 버튼 누르면 두 사진 다 자동 분석 후 가중평균(꼭지60%, 하부40%) 종합. */
 function onDualFile(files,side){
   if(!files||!files.length) return;
@@ -2758,7 +2760,7 @@ function onDualFile(files,side){
 
 function addPhoto(file){
   /* [2026-05-16 수정] 모든 모드(top/bottom/both)에서 SAM3 자동 검출
-     박스 모드를 흡수 — 사용자가 탭으로 꼭지/하부만 선택
+     박스 모드를 흡수 — 사용자가 탭으로 상부/하부만 선택
      이미지 처리 + EXIF GPS 추출 + SAM3 검출 */
   processImageFile(file, function(result){
     var idx=photos.length;
@@ -2818,9 +2820,9 @@ function renderPhotoGrid(){
     h+='<div class="ph'+on+'" onclick="selPhoto('+i+')">';
     h+='<img src="'+p.url+'">';
     h+='<span class="ph-n">'+(i+1)+'</span>';
-    /* ★ 꼭지/하부 모드 라벨 (2장 모드 작업) */
+    /* ★ 상부/하부 모드 라벨 (2장 모드 작업) */
     if(p.mode==='top'){
-      h+='<span style="position:absolute;top:3px;left:24px;background:rgba(255,100,100,.9);color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:6px">🔴 꼭지</span>';
+      h+='<span style="position:absolute;top:3px;left:24px;background:rgba(255,100,100,.9);color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:6px">🔴 상부</span>';
     } else if(p.mode==='bottom'){
       h+='<span style="position:absolute;top:3px;left:24px;background:rgba(100,181,246,.9);color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:6px">🔵 하부</span>';
     }
@@ -2850,10 +2852,10 @@ function selPhoto(i){
   var tipEl=document.getElementById('markTipText');
   if(tipEl){
     if(p.detectedApples && p.detectedApples.length>0){
-      var modeName = p.mode==='bottom' ? '하부(꽃받침)' : (p.mode==='both' ? '꼭지/하부' : '꼭지(상부)');
+      var modeName = p.mode==='bottom' ? '하부(꽃받침)' : (p.mode==='both' ? '상부/하부' : '상부');
       tipEl.innerHTML='🤖 <b>SAM3 자동 검출 완료</b> ('+modeName+'). 잘못 검출된 사과는 위 검토 바에서 삭제하세요.';
     } else {
-      if(p.mode==='top') tipEl.innerHTML='🔴 <b>꼭지(상부)</b> 사진 분석 중...';
+      if(p.mode==='top') tipEl.innerHTML='🔴 <b>상부</b> 사진 분석 중...';
       else if(p.mode==='bottom') tipEl.innerHTML='🔵 <b>하부(꽃받침)</b> 사진 분석 중...';
       else tipEl.textContent='AI가 사과를 자동 검출합니다.';
     }
@@ -3057,7 +3059,7 @@ function renderApples(){
   var p=photos[aIdx];
   var el=document.getElementById('appleList');
   if(!p||!p.apples.length){el.innerHTML='';return;}
-  var lbl=photoMode==='bottom'?'하부':'꼭지';
+  var lbl=photoMode==='bottom'?'하부':'상부';
   var html='<div class="section-label" style="margin-top:7px;margin-bottom:4px">마킹된 '+lbl+' 부위</div>';
   for(var i=0;i<p.apples.length;i++){
     var ap=p.apples[i];
@@ -3121,11 +3123,11 @@ function checkRun(){
     /* 판정 버튼 라벨에 진행 상태 표시 */
     var btn=document.getElementById('runBtn');
     if(btn){
-      if(!topP||!botP) btn.innerHTML='▶ 판정 (꼭지/하부 사진 둘 다 필요)';
+      if(!topP||!botP) btn.innerHTML='▶ 판정 (상부/하부 사진 둘 다 필요)';
       else if(topP.apples.length===0&&botP.apples.length===0) btn.innerHTML='▶ 판정 (양쪽 마킹 필요)';
-      else if(topP.apples.length===0) btn.innerHTML='▶ 판정 (꼭지 마킹 필요)';
+      else if(topP.apples.length===0) btn.innerHTML='▶ 판정 (상부 마킹 필요)';
       else if(botP.apples.length===0) btn.innerHTML='▶ 판정 (하부 마킹 필요)';
-      else btn.innerHTML='▶ 종합 판정 (꼭지+하부)';
+      else btn.innerHTML='▶ 종합 판정 (상부+하부)';
     }
   } else {
     ok=aIdx>=0&&photos[aIdx]&&photos[aIdx].apples&&photos[aIdx].apples.length>0;
@@ -3200,8 +3202,8 @@ function runDualAnalysis(){
     if(photos[i].mode==='top'){topP=photos[i];topIdx=i;}
     if(photos[i].mode==='bottom'){botP=photos[i];botIdx=i;}
   }
-  if(!topP||!botP){toast('꼭지/하부 사진이 모두 필요합니다');return;}
-  if(!topP.apples.length){toast('꼭지 사진을 먼저 마킹하세요');selPhoto(topIdx);return;}
+  if(!topP||!botP){toast('상부/하부 사진이 모두 필요합니다');return;}
+  if(!topP.apples.length){toast('상부 사진을 먼저 마킹하세요');selPhoto(topIdx);return;}
   if(!botP.apples.length){toast('하부 사진을 먼저 마킹하세요');selPhoto(botIdx);return;}
 
   /* 각 사진 자동 분석 */
@@ -3232,7 +3234,7 @@ function runDualAnalysis(){
   if(!topRes||!botRes){toast('픽셀 추출 실패. 마킹을 다시 해보세요');return;}
   topP.res=topRes; botP.res=botRes;
 
-  /* 가중평균 종합 (꼭지 60% + 하부 40%) */
+  /* 가중평균 종합 (상부 60% + 하부 40%) */
   var combined=Math.round((topRes.avg*0.6+botRes.avg*0.4)*10)/10;
   var combinedCard=getCard(combined);
   var combinedRes={
@@ -3241,7 +3243,7 @@ function runDualAnalysis(){
     conf:Math.round((topRes.conf*0.6+botRes.conf*0.4)),
     sc:Math.round((topRes.sc*0.6+botRes.sc*0.4)),
     items:[
-      {l:'꼭지 착색률 (60%)',w:'꼭지: '+topRes.avg+'%, '+topRes.cnt+'개',v:'+'+Math.round(topRes.avg*0.6),c:'pos'},
+      {l:'상부 착색률 (60%)',w:'상부: '+topRes.avg+'%, '+topRes.cnt+'개',v:'+'+Math.round(topRes.avg*0.6),c:'pos'},
       {l:'하부 착색률 (40%)',w:'하부: '+botRes.avg+'%, '+botRes.cnt+'개',v:'+'+Math.round(botRes.avg*0.4),c:'pos'}
     ],
     avgL:(topRes.avgL*0.6+botRes.avgL*0.4),cal:null,mode:'both',
@@ -3252,7 +3254,7 @@ function runDualAnalysis(){
   showResult(combinedRes,{top:topRes.avg,bot:botRes.avg});
   renderPhotoGrid(); renderApples(); redraw(); updSummary();
   updateSaveButton();
-  toast('🍎 종합 판정 완료! '+combined+'% (꼭지'+topRes.avg+'% · 하부'+botRes.avg+'%)');
+  toast('🍎 종합 판정 완료! '+combined+'% (상부'+topRes.avg+'% · 하부'+botRes.avg+'%)');
 }
 
 function showResult(r, dualInfo){
@@ -3272,7 +3274,7 @@ function showResult(r, dualInfo){
   var dualEl=document.getElementById('dualResultInfo');
   if(dualInfo){
     dualEl.style.display='block';
-    dualEl.textContent='꼭지 '+dualInfo.top+'% × 60% + 하부 '+dualInfo.bot+'% × 40% = '+r.avg+'%';
+    dualEl.textContent='상부 '+dualInfo.top+'% × 60% + 하부 '+dualInfo.bot+'% × 40% = '+r.avg+'%';
   } else {
     dualEl.style.display='none';
   }
@@ -3280,8 +3282,8 @@ function showResult(r, dualInfo){
   /* 측정값 레이블 */
   var mLabel=document.getElementById('measLabel');
   if(r.mode==='bottom') mLabel.textContent='🔵 하부 (평균)';
-  else if(r.mode==='both') mLabel.textContent='📸 종합 (꼭지+하부)';
-  else mLabel.textContent='🔴 꼭지 (평균)';
+  else if(r.mode==='both') mLabel.textContent='📸 종합 (상부+하부)';
+  else mLabel.textContent='🔴 상부 (평균)';
 
   if(aIdx>=0&&photos[aIdx]){
     var valid=[];
@@ -3349,7 +3351,7 @@ function showResult(r, dualInfo){
   /* 푸터노트도 품종에 맞춰 갱신 */
   var fn=document.getElementById('footnoteBase');
   if(fn){
-    fn.textContent='기준: '+(currentVariety==='hongro'?'국립원예특작과학원 홍로 숙기진단 LAB (a*=-3.0→0%, a*=+42.0→100%)':'농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=-5.7→0%, a*=+38.8→100%)')+'. 꼭지 부위 기준.';
+    fn.textContent='기준: '+(currentVariety==='hongro'?'국립원예특작과학원 홍로 숙기진단 LAB (a*=-3.0→0%, a*=+42.0→100%)':'농촌진흥청·한국농업전문학교 판정판 실측 LAB (a*=-5.7→0%, a*=+38.8→100%)')+'. 상부 부위 기준.';
   }
   selG(c.g);
 }
@@ -4323,7 +4325,7 @@ function scanWithClaudeVision(photoObj,idx){
             photoObj.apples.push({roi:roi2,res:null});
           }
         }
-        if(photoObj.apples.length>0){renderApples();checkRun();redraw();toast('🍎 꼭지 '+photoObj.apples.length+'개 자동 감지!');}
+        if(photoObj.apples.length>0){renderApples();checkRun();redraw();toast('🍎 상부 '+photoObj.apples.length+'개 자동 감지!');}
       }
     }catch(e){
       if(badge&&idx===aIdx) badge.textContent='위치 미설정';
@@ -5048,10 +5050,10 @@ function exportExcel(activeTab){
   /* ── 시트 1: 개별 기록 ── */
   var sheet1Data=[];
   /* 헤더 - 일조시간 2개 컬럼 (일평균 + 2주 누적) */
-  sheet1Data.push(['ID','측정일','수확일','지역','상세주소','촬영방식','착색률(%)','등급','등급명','신뢰도(%)','측정점수','꼭지개수','일평균 일조(h/일)','2주 누적 일조(h)','평균최고기온(°)','평균최저기온(°)','평균기온(°)','총강수량(mm)']);
+  sheet1Data.push(['ID','측정일','수확일','지역','상세주소','촬영방식','착색률(%)','등급','등급명','신뢰도(%)','측정점수','상부개수','일평균 일조(h/일)','2주 누적 일조(h)','평균최고기온(°)','평균최저기온(°)','평균기온(°)','총강수량(mm)']);
   for(var i=0;i<filtered.length;i++){
     var r=filtered[i];
-    var modeKr=r.mode==='both'?'상+하부 종합':r.mode==='bottom'?'하부만':'꼭지만';
+    var modeKr=r.mode==='both'?'상+하부 종합':r.mode==='bottom'?'하부만':'상부만';
     var w=r.weather||{};
     /* 2주 누적: 신규 저장은 sunHoursTotal 직접 사용, 옛 저장은 일평균 × 14로 환산 */
     var sunDaily=(typeof w.sunHours!=='undefined')?w.sunHours:'';

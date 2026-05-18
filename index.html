@@ -713,6 +713,22 @@ function hideKreiSplash(){
 
       <!-- 사진 업로드 -->
       <div class="section-label">사진 업로드</div>
+      
+      <!-- ════════════════════════════════════════════════════
+           자동 측정 옵션 (2026-05-17 추가)
+           체크하면 SAM3 검출 후 측정까지 자동 → 결과 패널에 누적
+           기본값: ON (사용자가 일괄 처리할 가능성 높음)
+           ════════════════════════════════════════════════════ -->
+      <div style="background:linear-gradient(135deg,rgba(127,211,211,.08),rgba(127,211,211,.02));border:1px solid rgba(127,211,211,.25);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px">
+          <input type="checkbox" id="autoMeasureCheck" checked onchange="toggleAutoMeasure()" style="width:16px;height:16px;cursor:pointer;accent-color:#7fd3d3">
+          <div style="flex:1">
+            <div style="color:#7fd3d3;font-weight:600">⚡ 자동 측정 (Auto-Measure)</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">사진 업로드 → SAM3 검출 → 측정까지 자동. 결과를 모은 후 선택해서 저장</div>
+          </div>
+        </label>
+      </div>
+      
       <div id="uploadAreaSingle" class="upload-single">
         <div class="upload-btn" id="dropZone">
           <input type="file" id="fileIn" accept="image/*" multiple onchange="onFiles(this.files)">
@@ -1872,7 +1888,73 @@ function applyWhiteBalance(photoObj, idx){
 /* ────────────────────────────────────────────────────
    Phase 2: SAM3로 사과 분할 (Netlify Function 호출)
    ──────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════
+   SAM3 호출 큐 (2026-05-17 추가, 429 Rate Limit 회피)
+   동시 호출 시 Replicate가 429를 던지므로 1장씩 순차 처리
+   사진 간 3초 대기로 안전 마진 확보
+   ════════════════════════════════════════════════════ */
+window._sam3Queue = window._sam3Queue || [];
+window._sam3QueueRunning = window._sam3QueueRunning || false;
+
+/* 큐에 등록 — addPhoto에서 호출 */
+function enqueueSAM3(photoObj, idx){
+  window._sam3Queue.push({photoObj: photoObj, idx: idx});
+  console.log('[SAM3 Queue] 추가됨. 대기 ' + window._sam3Queue.length + '장');
+  
+  /* 큐 상태 표시 패널 갱신 */
+  if(typeof updateQueueStatus === 'function') updateQueueStatus();
+  
+  /* 안 돌고 있으면 시작 */
+  if(!window._sam3QueueRunning){
+    processSAM3Queue();
+  }
+}
+
+/* 큐 순차 처리 — 재귀로 다음 사진까지 */
+function processSAM3Queue(){
+  if(window._sam3Queue.length === 0){
+    window._sam3QueueRunning = false;
+    console.log('[SAM3 Queue] 모든 처리 완료');
+    if(typeof updateQueueStatus === 'function') updateQueueStatus();
+    return;
+  }
+  
+  window._sam3QueueRunning = true;
+  var job = window._sam3Queue.shift();
+  console.log('[SAM3 Queue] 처리 시작 — 남은 사진 ' + window._sam3Queue.length + '장');
+  if(typeof updateQueueStatus === 'function') updateQueueStatus();
+  
+  /* 실제 SAM3 호출 */
+  callSAM3Real(job.photoObj, job.idx, function(){
+    /* 콜백 — 끝나면 3초 대기 후 다음 사진 */
+    console.log('[SAM3 Queue] 1장 완료. 3초 후 다음 사진 처리');
+    setTimeout(processSAM3Queue, 3000);
+  });
+}
+
+/* 큐 상태 UI 갱신 — 진행률 패널이 있으면 큐 정보도 같이 표시 */
+function updateQueueStatus(){
+  var detailEl = document.getElementById('batchProgressDetail');
+  if(detailEl && window._sam3Queue){
+    var remain = window._sam3Queue.length;
+    if(window._sam3QueueRunning && remain > 0){
+      detailEl.textContent = '⏳ 큐 대기 ' + remain + '장 (SAM3 순차 처리 중)';
+    } else if(remain === 0 && !window._sam3QueueRunning){
+      /* 큐 비었으면 그대로 두기 — 다른 메시지가 덮어쓸 것 */
+    }
+  }
+}
+
+/* 기존 callSAM3 — 큐를 거치는 진입점으로 변경 */
 function callSAM3(photoObj, idx){
+  enqueueSAM3(photoObj, idx);
+}
+
+/* 실제 SAM3 호출 (큐가 호출함) — onDone 콜백 받음 */
+function callSAM3Real(photoObj, idx, onDone){
+  /* 다음 처리를 큐에 알리기 위해 photoObj에 콜백 저장 — pollSAM3Result가 호출 */
+  photoObj._queueOnDone = onDone;
+  
   setBoxStatus('sam3');
   
   var imageData = photoObj.correctedUrl || photoObj.compressedUrl;
@@ -1913,6 +1995,12 @@ function callSAM3(photoObj, idx){
     console.error('[SAM3] 오류:', e);
     toast('⚠ SAM3 호출 실패: ' + e.message);
     setBoxStatus('error');
+    /* 큐 다음 사진으로 — 시작 단계 실패도 큐는 계속 진행 */
+    if(typeof photoObj._queueOnDone === 'function'){
+      var cb = photoObj._queueOnDone;
+      photoObj._queueOnDone = null;
+      cb();
+    }
   });
 }
 
@@ -1924,6 +2012,8 @@ function pollSAM3Result(photoObj, predictionId, attempt){
   if(attempt >= MAX_ATTEMPTS){
     toast('⚠ SAM3 시간 초과 (2분)');
     setBoxStatus('error');
+    if(typeof notifyBatchDone === 'function') notifyBatchDone((photoObj.name||'사진')+' (시간초과)');
+    callQueueDone(photoObj);
     return;
   }
   
@@ -1967,6 +2057,8 @@ function pollSAM3Result(photoObj, predictionId, attempt){
           setBoxStatus('error');
           /* (C) 일괄 진행률 — 실패도 카운트 */
           if(typeof notifyBatchDone === 'function') notifyBatchDone((photoObj.name||'사진')+' (검출0)');
+          /* 큐 다음 사진으로 */
+          callQueueDone(photoObj);
           return;
         }
         photoObj.detectedApples = apples;
@@ -1976,10 +2068,13 @@ function pollSAM3Result(photoObj, predictionId, attempt){
         setBoxStatus('detected', apples.length);
         /* (C) 일괄 진행률 카운트 */
         if(typeof notifyBatchDone === 'function') notifyBatchDone((photoObj.name||'사진')+' ('+apples.length+'개)');
+        /* 큐 다음 사진으로 */
+        callQueueDone(photoObj);
       } else if(data.status === 'failed' || data.status === 'canceled'){
         toast('⚠ SAM3 처리 실패: ' + (data.error || data.status));
         setBoxStatus('error');
         if(typeof notifyBatchDone === 'function') notifyBatchDone((photoObj.name||'사진')+' (실패)');
+        callQueueDone(photoObj);
       } else {
         /* 아직 처리 중 → 재시도 */
         return pollSAM3Result(photoObj, predictionId, attempt + 1);
@@ -1990,7 +2085,270 @@ function pollSAM3Result(photoObj, predictionId, attempt){
       toast('⚠ 폴링 실패: ' + e.message);
       setBoxStatus('error');
       if(typeof notifyBatchDone === 'function') notifyBatchDone((photoObj.name||'사진')+' (오류)');
+      callQueueDone(photoObj);
     });
+}
+
+/* 큐 콜백 호출 헬퍼 — 한 번만 호출되도록 보장 */
+function callQueueDone(photoObj){
+  /* 자동 측정 ON이면 SAM3 검출 성공 시 자동으로 측정 실행 */
+  if(typeof tryAutoMeasure === 'function'){
+    tryAutoMeasure(photoObj);
+  }
+  
+  if(typeof photoObj._queueOnDone === 'function'){
+    var cb = photoObj._queueOnDone;
+    photoObj._queueOnDone = null;
+    cb();
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   자동 측정 + 일괄 결과 패널 (2026-05-17 추가)
+   체크박스 ON 시 SAM3 검출 후 측정까지 자동 → 패널에 누적
+   ════════════════════════════════════════════════════ */
+
+window._batchResults = window._batchResults || [];
+
+/* 자동 측정 체크박스 변경 시 */
+function toggleAutoMeasure(){
+  var cb = document.getElementById('autoMeasureCheck');
+  window._autoMeasureEnabled = cb ? cb.checked : true;
+  console.log('[Auto-Measure]', window._autoMeasureEnabled ? 'ON' : 'OFF');
+}
+
+/* SAM3 검출 완료 후 자동 측정 시도 (큐 콜백에서 호출됨) */
+function tryAutoMeasure(photoObj){
+  /* 체크박스 초기값 ON (체크박스가 없거나 체크돼있으면 자동 측정) */
+  var cb = document.getElementById('autoMeasureCheck');
+  var autoOn = cb ? cb.checked : true;
+  if(!autoOn) return;
+  
+  /* SAM3 검출 실패한 사진 — 결과 패널에 실패로 기록 */
+  if(!photoObj.detectedApples || photoObj.detectedApples.length === 0){
+    addBatchResult(photoObj, null, 'detect_failed');
+    return;
+  }
+  
+  /* 자동 측정 실행 — 현재 사진이 활성 사진인지 확인 후 진행 */
+  var prevIdx = aIdx;
+  var photoIdx = photos.indexOf(photoObj);
+  if(photoIdx < 0) return;
+  
+  /* aIdx를 잠깐 해당 사진으로 바꾼 후 측정 호출 → 끝나면 원래대로 */
+  aIdx = photoIdx;
+  try {
+    startBoxColorCorrection();
+    /* 측정 동기적으로 끝남 → boxResult 생성됨 */
+    if(photoObj.boxResult){
+      addBatchResult(photoObj, photoObj.boxResult, 'success');
+    } else {
+      addBatchResult(photoObj, null, 'measure_failed');
+    }
+  } catch(e){
+    console.error('[Auto-Measure] 측정 오류:', e);
+    addBatchResult(photoObj, null, 'measure_failed');
+  } finally {
+    aIdx = prevIdx;
+    /* UI를 원래 활성 사진으로 복원 */
+    if(prevIdx >= 0 && prevIdx !== photoIdx) redraw();
+  }
+}
+
+/* 결과 패널에 1건 추가 */
+function addBatchResult(photoObj, result, status){
+  if(!window._batchResults) window._batchResults = [];
+  
+  var item = {
+    photoIdx: photos.indexOf(photoObj),
+    photoName: photoObj.name || ('사진 ' + (photos.indexOf(photoObj)+1)),
+    photoMode: photoObj.mode || 'top',
+    status: status, /* 'success' | 'detect_failed' | 'measure_failed' */
+    result: result,
+    selected: status === 'success', /* 성공한 것만 기본 선택 */
+    saved: false
+  };
+  window._batchResults.push(item);
+  
+  renderBatchResultsPanel();
+}
+
+/* 결과 패널 렌더링 */
+function renderBatchResultsPanel(){
+  var panel = document.getElementById('batchResultsPanel');
+  var list = document.getElementById('batchResultsList');
+  var subtitle = document.getElementById('batchResultsSubtitle');
+  var saveBtn = document.getElementById('batchSaveBtn');
+  if(!panel || !list) return;
+  
+  var results = window._batchResults || [];
+  if(results.length === 0){
+    panel.style.display = 'none';
+    return;
+  }
+  
+  panel.style.display = 'block';
+  
+  /* 상태 카운트 */
+  var success = results.filter(function(r){return r.status === 'success' && !r.saved;}).length;
+  var failed = results.filter(function(r){return r.status !== 'success';}).length;
+  var saved = results.filter(function(r){return r.saved;}).length;
+  var selected = results.filter(function(r){return r.selected && !r.saved;}).length;
+  
+  if(subtitle){
+    var parts = [];
+    parts.push(results.length + '장 처리됨');
+    if(success > 0) parts.push('성공 ' + success);
+    if(failed > 0) parts.push('실패 ' + failed);
+    if(saved > 0) parts.push('저장 ' + saved);
+    subtitle.textContent = parts.join(' · ');
+  }
+  
+  /* 저장 버튼 라벨 */
+  if(saveBtn){
+    saveBtn.textContent = selected > 0 ? '💾 선택한 ' + selected + '개 저장' : '💾 선택된 항목 없음';
+    saveBtn.style.opacity = selected > 0 ? '1' : '.5';
+    saveBtn.style.cursor = selected > 0 ? 'pointer' : 'not-allowed';
+  }
+  
+  /* 카드 목록 렌더링 */
+  var html = '';
+  for(var i = 0; i < results.length; i++){
+    var item = results[i];
+    var disabled = item.status !== 'success';
+    var savedStyle = item.saved ? 'opacity:.4;text-decoration:line-through' : '';
+    
+    if(item.saved){
+      /* 저장됨 — 회색 표시 */
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;margin-bottom:5px;'+savedStyle+'">' +
+        '<div style="width:24px;height:24px;border-radius:6px;background:#4a5e4a;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:10px">✓</div>' +
+        '<div style="flex:1;font-size:11px;color:rgba(255,255,255,.6)">' + escapeHtml(item.photoName) + ' · 저장됨</div>' +
+        '</div>';
+      continue;
+    }
+    
+    if(item.status === 'success'){
+      var r = item.result;
+      var card = getCard(r.avgPct);
+      var modeKr = item.photoMode === 'bottom' ? '🔵하부' : item.photoMode === 'both' ? '상하부' : '🔴상부';
+      var warnIcon = '';
+      var warnMsg = '';
+      if(r.count < 3){
+        warnIcon = '⚠';
+        warnMsg = ' · ⚠ 사과 ' + r.count + '개만';
+      }
+      
+      var bgColor = warnIcon ? 'rgba(232,160,32,.1)' : 'rgba(140,196,74,.08)';
+      var borderColor = warnIcon ? 'rgba(232,160,32,.4)' : 'rgba(140,196,74,.3)';
+      
+      html += '<div data-batch-idx="' + i + '" style="display:flex;align-items:center;gap:8px;padding:10px;background:'+bgColor+';border:1px solid '+borderColor+';border-radius:6px;margin-bottom:5px;cursor:pointer" onclick="openBatchItem(' + i + ', event)">' +
+        '<input type="checkbox" ' + (item.selected ? 'checked' : '') + ' onclick="event.stopPropagation();toggleBatchItem(' + i + ', this.checked)" style="margin:0;cursor:pointer;accent-color:#7fd3d3">' +
+        '<div style="width:30px;height:30px;border-radius:6px;background:'+card.color+';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:11px;flex-shrink:0">' + card.l + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:12px;font-weight:600;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(item.photoName) + '</div>' +
+          '<div style="font-size:10px;color:rgba(255,255,255,.6);font-family:var(--mm)">' + r.avgPct + '% · ' + modeKr + ' · 사과 ' + r.count + '개' + warnMsg + '</div>' +
+        '</div>' +
+        '<span style="color:' + (warnIcon ? '#e8a020' : '#8cc44a') + ';font-size:14px;flex-shrink:0">' + (warnIcon || '✓') + '</span>' +
+        '</div>';
+    } else {
+      /* 실패 (SAM3 검출 실패 또는 측정 실패) */
+      var failMsg = item.status === 'detect_failed' ? 'SAM3 검출 실패' : '측정 실패';
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:10px;background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.3);border-radius:6px;margin-bottom:5px;opacity:.7">' +
+        '<input type="checkbox" disabled style="margin:0">' +
+        '<div style="width:30px;height:30px;border-radius:6px;background:#444;display:flex;align-items:center;justify-content:center;color:#888;font-weight:700;font-size:11px;flex-shrink:0">—</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:12px;font-weight:600;color:rgba(255,255,255,.6)">' + escapeHtml(item.photoName) + '</div>' +
+          '<div style="font-size:10px;color:#ff8b8b">✗ ' + failMsg + '</div>' +
+        '</div>' +
+        '<span style="color:#e74c3c;font-size:14px;flex-shrink:0">✗</span>' +
+        '</div>';
+    }
+  }
+  list.innerHTML = html;
+}
+
+/* HTML escape 헬퍼 */
+function escapeHtml(s){
+  if(!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* 체크박스 토글 */
+function toggleBatchItem(idx, checked){
+  if(window._batchResults && window._batchResults[idx]){
+    window._batchResults[idx].selected = checked;
+    renderBatchResultsPanel();
+  }
+}
+
+/* 전체 선택 / 해제 */
+function batchSelectAll(){
+  if(!window._batchResults) return;
+  window._batchResults.forEach(function(r){
+    if(r.status === 'success' && !r.saved) r.selected = true;
+  });
+  renderBatchResultsPanel();
+}
+function batchSelectNone(){
+  if(!window._batchResults) return;
+  window._batchResults.forEach(function(r){ r.selected = false; });
+  renderBatchResultsPanel();
+}
+
+/* 항목 클릭 → 해당 사진 상세 결과 보기 */
+function openBatchItem(idx, ev){
+  if(ev && ev.target && ev.target.tagName === 'INPUT') return; /* 체크박스 클릭은 무시 */
+  if(!window._batchResults || !window._batchResults[idx]) return;
+  var item = window._batchResults[idx];
+  if(item.photoIdx < 0 || !photos[item.photoIdx]) return;
+  aIdx = item.photoIdx;
+  redraw();
+  showBoxResult(photos[aIdx]);
+  /* 결과 화면으로 스크롤 */
+  setTimeout(function(){
+    var el = document.querySelector('.canvas-section') || document.body;
+    el.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 100);
+}
+
+/* 패널 닫기 */
+function closeBatchResultsPanel(){
+  var panel = document.getElementById('batchResultsPanel');
+  if(panel) panel.style.display = 'none';
+}
+
+/* 선택한 항목 일괄 저장 */
+function batchSaveSelected(){
+  if(!window._batchResults) return;
+  var toSave = window._batchResults.filter(function(r){
+    return r.selected && r.status === 'success' && !r.saved;
+  });
+  if(toSave.length === 0){
+    toast('⚠ 선택된 항목이 없습니다');
+    return;
+  }
+  
+  var savedCnt = 0;
+  for(var i = 0; i < toSave.length; i++){
+    var item = toSave[i];
+    if(item.photoIdx < 0 || !photos[item.photoIdx]) continue;
+    
+    /* aIdx 임시 변경 후 saveBoxResult 호출 — 기존 저장 로직 그대로 활용 */
+    var prevIdx = aIdx;
+    aIdx = item.photoIdx;
+    try {
+      saveBoxResult();
+      item.saved = true;
+      savedCnt++;
+    } catch(e){
+      console.error('[Batch Save] 저장 오류:', e);
+    } finally {
+      aIdx = prevIdx;
+    }
+  }
+  
+  toast('✅ ' + savedCnt + '개 기록 저장 완료');
+  renderBatchResultsPanel();
 }
 
 /* SAM3 출력을 표준 사과 배열로 변환 */
@@ -5987,5 +6345,31 @@ renderStatsMemo();
 renderRecordsPage();
 initVarietyUI();
 </script>
+<!-- ════════════════════════════════════════════════════
+     일괄 측정 결과 패널 (2026-05-17 추가)
+     자동 측정 ON일 때 측정 끝난 결과들이 여기에 누적
+     사용자가 체크박스로 선택해서 일괄 저장
+     ════════════════════════════════════════════════════ -->
+<div id="batchResultsPanel" style="display:none;position:fixed;bottom:20px;right:20px;width:380px;max-width:calc(100vw - 40px);max-height:70vh;background:#0f1f2e;border:1px solid rgba(127,211,211,.4);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);z-index:9998;overflow:hidden;backdrop-filter:blur(10px)">
+  <div style="background:linear-gradient(135deg,#1a2f42,#15263a);padding:14px;border-bottom:1px solid rgba(127,211,211,.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#7fd3d3">📋 일괄 측정 결과</div>
+        <div id="batchResultsSubtitle" style="font-size:10px;color:rgba(255,255,255,.5);margin-top:2px">0장 처리됨</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button onclick="batchSelectAll()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:white;font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer">전체 선택</button>
+        <button onclick="batchSelectNone()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:white;font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer">해제</button>
+        <button onclick="closeBatchResultsPanel()" style="background:transparent;border:none;color:rgba(255,255,255,.5);font-size:18px;cursor:pointer;line-height:1;padding:0 4px" title="닫기">×</button>
+      </div>
+    </div>
+  </div>
+  <div id="batchResultsList" style="max-height:calc(70vh - 130px);overflow-y:auto;padding:10px"></div>
+  <div style="padding:10px 14px;border-top:1px solid rgba(127,211,211,.2);background:rgba(0,0,0,.2)">
+    <button id="batchSaveBtn" onclick="batchSaveSelected()" style="width:100%;padding:12px;background:linear-gradient(90deg,#7fd3d3,#8cc44a);border:none;color:#0a1f2e;font-weight:700;font-size:13px;border-radius:6px;cursor:pointer">💾 선택한 항목 저장</button>
+    <div style="text-align:center;font-size:10px;color:rgba(255,255,255,.4);margin-top:8px">개별 항목 클릭 시 상세 결과 보기</div>
+  </div>
+</div>
+
 </body>
 </html>

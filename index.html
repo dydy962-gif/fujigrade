@@ -2168,6 +2168,30 @@ function processSAM3Queue(){
     window._sam3QueueRunning = false;
     console.log('[SAM3 Queue] 모든 처리 완료');
     if(typeof updateQueueStatus === 'function') updateQueueStatus();
+    /* ★ 2026-05-19 v4 안전망: processing 상태로 남은 사진들 강제 측정 시도
+       (자동 측정 OFF 또는 어떤 이유로든 측정 누락된 경우 대비) */
+    setTimeout(function(){
+      if(window._batchResults){
+        var stillProcessing = window._batchResults.filter(function(r){ return r.status === 'processing'; });
+        if(stillProcessing.length > 0){
+          console.warn('[SAM3 Queue] ⚠ 큐 완료 후에도 분석 중인 사진 ' + stillProcessing.length + '장 발견 — 강제 측정 시도');
+          for(var i = 0; i < stillProcessing.length; i++){
+            var item = stillProcessing[i];
+            var p = photos[item.photoIdx];
+            if(!p) continue;
+            if(p.detectedApples && p.detectedApples.length > 0){
+              /* SAM3는 끝났는데 측정만 안 된 사진 → 다시 측정 시도 */
+              console.log('[Safety Retry] 사진 idx=' + item.photoIdx + ' 강제 측정 시도');
+              tryAutoMeasure(p);
+            } else {
+              /* SAM3도 결과 없는 사진 → 검출 실패로 마킹 */
+              console.log('[Safety Retry] 사진 idx=' + item.photoIdx + ' 검출 결과 없음 → detect_failed');
+              addBatchResult(p, null, 'detect_failed');
+            }
+          }
+        }
+      }
+    }, 2000); /* 2초 후에 — 마지막 사진 측정 끝날 시간 줌 */
     return;
   }
   
@@ -2371,38 +2395,43 @@ function toggleAutoMeasure(){
 
 /* SAM3 검출 완료 후 자동 측정 시도 (큐 콜백에서 호출됨) */
 function tryAutoMeasure(photoObj){
+  var pIdx = photos.indexOf(photoObj);
   /* 체크박스 초기값 ON (체크박스가 없거나 체크돼있으면 자동 측정) */
   var cb = document.getElementById('autoMeasureCheck');
   var autoOn = cb ? cb.checked : true;
-  if(!autoOn) return;
+  console.log('[tryAutoMeasure] 사진 idx=' + pIdx + ' / autoOn=' + autoOn + ' / detectedApples=' + (photoObj.detectedApples ? photoObj.detectedApples.length : 'null'));
+  
+  if(!autoOn){
+    console.log('[tryAutoMeasure] 자동 측정 OFF — 패널 갱신 안 됨. 수동으로 측정 시작 버튼 클릭 필요');
+    /* ★ 자동 측정 OFF인 경우에도 검출 완료는 상태에 반영 */
+    return;
+  }
   
   /* SAM3 검출 실패한 사진 — 결과 패널에 실패로 기록 */
   if(!photoObj.detectedApples || photoObj.detectedApples.length === 0){
+    console.warn('[tryAutoMeasure] 사진 idx=' + pIdx + ' — SAM3 검출 결과 없음, detect_failed 기록');
     addBatchResult(photoObj, null, 'detect_failed');
     return;
   }
   
   /* 자동 측정 실행 — 현재 사진이 활성 사진인지 확인 후 진행 */
   var prevIdx = aIdx;
-  var photoIdx = photos.indexOf(photoObj);
+  var photoIdx = pIdx;
   if(photoIdx < 0) return;
   
-  /* aIdx를 잠깐 해당 사진으로 바꾼 후 측정 호출 → 끝나면 원래대로 */
+  console.log('[tryAutoMeasure] 사진 idx=' + photoIdx + ' 측정 시작 (사과 ' + photoObj.detectedApples.length + '개)');
+  
+  /* ★ 2026-05-19 v4 수정: startBoxColorCorrection은 동기 측정 함수.
+     호출하면 runColorMeasurement 안에서 boxResult 만들고 addBatchResult('success') 자동 호출됨. */
   aIdx = photoIdx;
   try {
     startBoxColorCorrection();
-    /* 측정 동기적으로 끝남 → boxResult 생성됨 */
-    if(photoObj.boxResult){
-      addBatchResult(photoObj, photoObj.boxResult, 'success');
-    } else {
-      addBatchResult(photoObj, null, 'measure_failed');
-    }
+    console.log('[tryAutoMeasure] 사진 idx=' + photoIdx + ' startBoxColorCorrection 완료');
   } catch(e){
-    console.error('[Auto-Measure] 측정 오류:', e);
+    console.error('[tryAutoMeasure] 사진 idx=' + photoIdx + ' 측정 오류:', e);
     addBatchResult(photoObj, null, 'measure_failed');
   } finally {
     aIdx = prevIdx;
-    /* UI를 원래 활성 사진으로 복원 */
     if(prevIdx >= 0 && prevIdx !== photoIdx) redraw();
   }
 }
@@ -2472,19 +2501,50 @@ function renderBatchResultsPanel(){
   
   panel.style.display = 'block';
   
+  /* ★ 2026-05-19 v4: 첫 표시 시 자동으로 접힘 상태로 시작
+     사용자가 일부러 펼쳐서 봤다면 그 상태 유지 (_userExpanded 플래그) */
+  if(!window._batchPanelEverShown){
+    panel.classList.add('minimized');
+    var minBtn = document.getElementById('batchMinBtn');
+    if(minBtn) minBtn.textContent = '□';
+    window._batchPanelEverShown = true;
+  }
+  
   /* 상태 카운트 */
   var success = results.filter(function(r){return r.status === 'success' && !r.saved;}).length;
-  var failed = results.filter(function(r){return r.status !== 'success';}).length;
+  var failed = results.filter(function(r){return r.status !== 'success' && r.status !== 'processing';}).length;
   var saved = results.filter(function(r){return r.saved;}).length;
   var selected = results.filter(function(r){return r.selected && !r.saved;}).length;
+  var processing = results.filter(function(r){return r.status === 'processing';}).length;
+  
+  /* 진행 중 사진이 있으면 펄스 효과 (시각적 강조) */
+  panel.classList.toggle('processing', processing > 0);
   
   if(subtitle){
     var parts = [];
-    parts.push(results.length + '장 처리됨');
-    if(success > 0) parts.push('성공 ' + success);
-    if(failed > 0) parts.push('실패 ' + failed);
-    if(saved > 0) parts.push('저장 ' + saved);
+    if(processing > 0){
+      parts.push('⏳ 분석 중 ' + processing);
+    }
+    if(success > 0) parts.push('✓ 완료 ' + success);
+    if(failed > 0) parts.push('✗ 실패 ' + failed);
+    if(saved > 0) parts.push('💾 저장 ' + saved);
+    if(parts.length === 0) parts.push(results.length + '장 처리됨');
     subtitle.textContent = parts.join(' · ');
+  }
+  
+  /* ★ 메인 타이틀도 상태에 따라 동적 변경 */
+  var titleEl = panel.querySelector('.batch-header-title strong');
+  if(titleEl){
+    if(processing > 0){
+      titleEl.textContent = processing + '/' + results.length + ' 분석 중';
+      titleEl.style.color = '#a0d7fa';
+    } else if(success > 0 && processing === 0){
+      titleEl.textContent = '측정 완료 (' + success + ')';
+      titleEl.style.color = '#7fc6f5';
+    } else {
+      titleEl.textContent = '일괄 측정 결과';
+      titleEl.style.color = '#a0d7fa';
+    }
   }
   
   /* 저장 버튼 라벨 — 3개 버튼 모두 선택 개수 표시 */
@@ -3407,6 +3467,13 @@ function startBoxColorCorrection(){
     variety: currentVariety,
     varietyName: VARIETY[currentVariety].name
   };
+  
+  /* ★ 2026-05-19 v4 수정: 일괄 결과 패널 상태 업데이트
+     이전에는 startBoxColorCorrection 직후 호출했는데 그건 비동기 시작점이라
+     boxResult가 아직 없었음 → 'measure_failed' 잘못 기록되던 버그 해결.
+     실제 측정 완료 시점인 여기서 호출하는 게 맞음. */
+  console.log('[Measurement Complete] 사진 idx=' + photos.indexOf(p) + ' / 평균=' + avgPct + '% / 사과=' + results.length + '개');
+  addBatchResult(p, p.boxResult, 'success');
   
   showBoxResult(p);
   toast('✅ 측정 완료: 평균 ' + avgPct + '% (' + avgCard.l + ')');
@@ -7054,30 +7121,444 @@ initVarietyUI();
      자동 측정 ON일 때 측정 끝난 결과들이 여기에 누적
      사용자가 체크박스로 선택해서 일괄 저장
      ════════════════════════════════════════════════════ -->
-<div id="batchResultsPanel" style="display:none;position:fixed;bottom:20px;right:20px;width:380px;max-width:calc(100vw - 40px);max-height:70vh;background:#0a0a0a;border:1px solid rgba(160,215,250,.4);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);z-index:9998;overflow:hidden;backdrop-filter:blur(10px)">
-  <div style="background:linear-gradient(135deg,#1a1a1a,#161616);padding:14px;border-bottom:1px solid rgba(160,215,250,.2)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <div>
-        <div style="font-size:13px;font-weight:700;color:#a0d7fa">📋 일괄 측정 결과</div>
-        <div id="batchResultsSubtitle" style="font-size:10px;color:rgba(255,255,255,.5);margin-top:2px">0장 처리됨</div>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <button onclick="batchSelectAll()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:white;font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer">전체 선택</button>
-        <button onclick="batchSelectNone()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:white;font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer">해제</button>
-        <button onclick="closeBatchResultsPanel()" style="background:transparent;border:none;color:rgba(255,255,255,.5);font-size:18px;cursor:pointer;line-height:1;padding:0 4px" title="닫기">×</button>
+<!-- ★ 2026-05-19 v3: 드래그 가능한 떠다니는 결과 패널 -->
+<style>
+#batchResultsPanel{
+  position:fixed;
+  top:80px; right:20px;
+  width:380px;
+  background:#0a0a0a;
+  border:1px solid rgba(160,215,250,.4);
+  border-radius:12px;
+  box-shadow:0 12px 40px rgba(0,0,0,.5);
+  z-index:9998;
+  overflow:hidden;
+  backdrop-filter:blur(10px);
+  resize:both; /* 사용자가 우하단 모서리 드래그로 크기 조절 */
+  min-width:280px; min-height:200px;
+  max-width:90vw; max-height:90vh;
+}
+#batchResultsPanel.minimized{
+  height:auto !important;
+  min-height:0;
+  resize:none;
+  width:220px !important;
+  border-radius:24px;
+  cursor:pointer;
+  transition:width .25s ease, border-radius .25s ease;
+}
+#batchResultsPanel.minimized:hover{
+  width:240px !important;
+  background:#0f0f0f;
+  border-color:rgba(160,215,250,.6);
+}
+#batchResultsPanel.minimized .batch-body,
+#batchResultsPanel.minimized .batch-footer{display:none}
+#batchResultsPanel.minimized .batch-header{
+  padding:8px 14px;
+  border-bottom:none;
+  background:transparent;
+  cursor:pointer;
+}
+#batchResultsPanel.minimized .batch-header:hover{background:transparent}
+/* 최소화 상태에서는 컨트롤 버튼 중 일부만 표시 (닫기만) */
+#batchResultsPanel.minimized .batch-ctrl-btn[title="전체 선택"],
+#batchResultsPanel.minimized .batch-ctrl-btn[title="해제"]{display:none}
+#batchResultsPanel.minimized .batch-ctrl-btn[title="최소화/복원"]{display:none}
+/* 최소화 상태 - 진행 중 점멸 효과 */
+@keyframes panelPulse{
+  0%,100%{box-shadow:0 4px 16px rgba(160,215,250,.15)}
+  50%{box-shadow:0 4px 24px rgba(160,215,250,.4)}
+}
+#batchResultsPanel.minimized.processing{
+  animation:panelPulse 2s ease-in-out infinite;
+}
+/* 클릭 안내 화살표 */
+#batchResultsPanel.minimized .batch-header-title strong::after{
+  content:' ›';
+  color:rgba(160,215,250,.5);
+  font-size:14px;
+  transition:transform .2s;
+}
+#batchResultsPanel.minimized:hover .batch-header-title strong::after{
+  color:#a0d7fa;
+}
+#batchResultsPanel .batch-header{
+  cursor:move;
+  user-select:none;
+  background:linear-gradient(135deg,#1a1a1a,#161616);
+  padding:10px 14px;
+  border-bottom:1px solid rgba(160,215,250,.2);
+  display:flex;justify-content:space-between;align-items:center;
+}
+#batchResultsPanel .batch-header:hover{background:linear-gradient(135deg,#222,#1c1c1c)}
+.batch-header-title{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+.batch-header-title-text{min-width:0}
+.batch-header-title strong{font-size:12px;color:#a0d7fa;display:block;line-height:1.2}
+.batch-header-title small{font-size:10px;color:rgba(255,255,255,.45);display:block;margin-top:2px}
+.batch-header-controls{display:flex;gap:4px;flex-shrink:0}
+.batch-ctrl-btn{
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  color:rgba(255,255,255,.7);font-size:11px;width:24px;height:24px;
+  border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mm);line-height:1;
+  transition:background .15s;
+}
+.batch-ctrl-btn:hover{background:rgba(255,255,255,.12);color:white}
+#batchResultsPanel .batch-body{
+  overflow-y:auto;
+  padding:10px;
+  height:calc(100% - 48px - 130px); /* 헤더 + 푸터 제외 */
+}
+#batchResultsPanel .batch-footer{
+  padding:10px 14px;
+  border-top:1px solid rgba(160,215,250,.2);
+  background:rgba(0,0,0,.25);
+}
+#batchResultsPanel.minimized{cursor:pointer}
+
+/* ── 저장 전 위치 확인 다이얼로그 ── */
+#locConfirmDialog{
+  position:fixed;inset:0;z-index:99999;
+  background:rgba(0,0,0,.7);
+  display:none;align-items:center;justify-content:center;
+  backdrop-filter:blur(4px);
+}
+#locConfirmDialog.show{display:flex}
+.lc-box{
+  background:#0d0d10;
+  border:1px solid rgba(160,215,250,.3);
+  border-radius:12px;
+  width:min(560px,calc(100vw - 32px));
+  max-height:85vh;
+  display:flex;flex-direction:column;
+  box-shadow:0 16px 48px rgba(0,0,0,.6);
+}
+.lc-head{
+  padding:16px 20px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.lc-head-l strong{font-size:14px;color:#a0d7fa;display:block}
+.lc-head-l small{font-size:11px;color:rgba(255,255,255,.5);display:block;margin-top:2px}
+.lc-head-x{
+  background:none;border:none;color:rgba(255,255,255,.5);
+  font-size:20px;cursor:pointer;padding:0 4px;
+}
+.lc-list{flex:1;overflow-y:auto;padding:12px}
+.lc-item{
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:8px;padding:10px 12px;margin-bottom:8px;
+}
+.lc-item.warn{border-color:rgba(245,166,35,.4);background:rgba(245,166,35,.04)}
+.lc-item-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px}
+.lc-item-num{
+  background:rgba(160,215,250,.15);color:#a0d7fa;
+  font-family:var(--mm);font-size:11px;font-weight:700;
+  padding:2px 8px;border-radius:4px;flex-shrink:0;
+}
+.lc-item-pct{font-family:var(--mm);font-size:11px;color:rgba(255,255,255,.5);flex:1;text-align:right}
+.lc-addr-row{display:flex;gap:6px;align-items:center}
+.lc-addr-input{
+  flex:1;background:rgba(0,0,0,.4);
+  border:1px solid rgba(255,255,255,.1);
+  color:white;font-size:12px;
+  padding:7px 10px;border-radius:6px;
+  font-family:var(--fm);
+}
+.lc-addr-input:focus{outline:none;border-color:#a0d7fa}
+.lc-addr-input::placeholder{color:rgba(255,255,255,.3)}
+.lc-del-btn{
+  background:rgba(231,76,60,.15);border:1px solid rgba(231,76,60,.4);
+  color:#ff8b8b;font-size:11px;
+  padding:7px 10px;border-radius:6px;cursor:pointer;
+  font-family:var(--fm);white-space:nowrap;
+}
+.lc-del-btn:hover{background:rgba(231,76,60,.25)}
+.lc-status{font-family:var(--mm);font-size:10px;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,.08)}
+.lc-status.ok{color:#7fc6f5}
+.lc-status.warn{color:#f5a623}
+.lc-status.del{color:#ff8b8b}
+.lc-foot{
+  padding:12px 20px;
+  border-top:1px solid rgba(255,255,255,.08);
+  display:flex;gap:8px;justify-content:flex-end;
+}
+.lc-btn{
+  padding:9px 18px;border-radius:6px;font-size:13px;font-weight:600;
+  cursor:pointer;font-family:var(--fm);border:none;
+}
+.lc-btn.cancel{background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.1)}
+.lc-btn.cancel:hover{background:rgba(255,255,255,.1)}
+.lc-btn.confirm{background:var(--action);color:#0a0a0a}
+.lc-btn.confirm:hover{filter:brightness(1.1)}
+</style>
+
+<div id="batchResultsPanel" style="display:none">
+  <div class="batch-header" id="batchHeader">
+    <div class="batch-header-title">
+      <span style="font-size:14px">📋</span>
+      <div class="batch-header-title-text">
+        <strong>일괄 측정 결과</strong>
+        <small id="batchResultsSubtitle">0장 처리됨</small>
       </div>
     </div>
+    <div class="batch-header-controls">
+      <button class="batch-ctrl-btn" onclick="event.stopPropagation();batchSelectAll()" title="전체 선택">☑</button>
+      <button class="batch-ctrl-btn" onclick="event.stopPropagation();batchSelectNone()" title="해제">☐</button>
+      <button class="batch-ctrl-btn" onclick="event.stopPropagation();toggleMinBatchPanel()" title="최소화/복원" id="batchMinBtn">─</button>
+      <button class="batch-ctrl-btn" onclick="event.stopPropagation();closeBatchResultsPanel()" title="닫기">×</button>
+    </div>
   </div>
-  <div id="batchResultsList" style="max-height:calc(70vh - 130px);overflow-y:auto;padding:10px"></div>
-  <div style="padding:10px 14px;border-top:1px solid rgba(160,215,250,.2);background:rgba(0,0,0,.2)">
+  <div class="batch-body">
+    <div id="batchResultsList"></div>
+  </div>
+  <div class="batch-footer">
     <div style="display:flex;gap:6px;margin-bottom:6px">
-      <button id="batchSaveBtn" onclick="batchSaveSelected()" style="flex:1;padding:10px;background:var(--action);border:none;color:#0a0a0a;font-weight:700;font-size:12px;border-radius:6px;cursor:pointer">💾 데이터 저장</button>
+      <button id="batchSaveBtn" onclick="confirmLocationsBeforeSave()" style="flex:1;padding:10px;background:var(--action);border:none;color:#0a0a0a;font-weight:700;font-size:12px;border-radius:6px;cursor:pointer">💾 데이터 저장</button>
       <button id="batchSaveImgBtn" onclick="batchSaveImages()" style="flex:1;padding:10px;background:rgba(160,215,250,.15);border:1px solid #a0d7fa;color:#a0d7fa;font-weight:700;font-size:12px;border-radius:6px;cursor:pointer">📥 이미지 저장</button>
     </div>
     <button id="batchSaveBothBtn" onclick="batchSaveBoth()" style="width:100%;padding:10px;background:rgba(127,198,245,.15);border:1px solid #7fc6f5;color:#7fc6f5;font-weight:700;font-size:12px;border-radius:6px;cursor:pointer">💾📥 둘 다 한 번에 저장</button>
-    <div style="text-align:center;font-size:10px;color:rgba(255,255,255,.4);margin-top:8px">개별 항목 클릭 시 상세 결과 보기</div>
+    <div style="text-align:center;font-size:10px;color:rgba(255,255,255,.4);margin-top:8px">드래그하여 이동 · 우하단 모서리로 크기조절</div>
   </div>
 </div>
+
+<!-- ★ 저장 전 위치 확인 다이얼로그 -->
+<div id="locConfirmDialog">
+  <div class="lc-box">
+    <div class="lc-head">
+      <div class="lc-head-l">
+        <strong>📍 사진별 위치 확인</strong>
+        <small>각 사진의 저장 위치를 확인하고, 필요하면 수정 또는 삭제하세요</small>
+      </div>
+      <button class="lc-head-x" onclick="closeLocConfirmDialog()">×</button>
+    </div>
+    <div class="lc-list" id="lcList"></div>
+    <div class="lc-foot">
+      <button class="lc-btn cancel" onclick="closeLocConfirmDialog()">취소</button>
+      <button class="lc-btn confirm" onclick="executeBatchSaveWithLocations()">확인하고 저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── 드래그 이동 로직 ── */
+(function setupBatchPanelDrag(){
+  var panel = document.getElementById('batchResultsPanel');
+  var header = document.getElementById('batchHeader');
+  if(!panel || !header) return;
+  var isDown = false, sX, sY, startL, startT;
+  header.addEventListener('mousedown', function(e){
+    if(e.target.tagName === 'BUTTON' || panel.classList.contains('minimized')) return;
+    isDown = true;
+    sX = e.clientX; sY = e.clientY;
+    var r = panel.getBoundingClientRect();
+    startL = r.left; startT = r.top;
+    /* right/bottom 고정 해제하고 left/top으로 전환 */
+    panel.style.left = startL + 'px';
+    panel.style.top = startT + 'px';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function(e){
+    if(!isDown) return;
+    var nl = startL + (e.clientX - sX);
+    var nt = startT + (e.clientY - sY);
+    /* 화면 밖으로 못 나가게 */
+    nl = Math.max(0, Math.min(window.innerWidth - 100, nl));
+    nt = Math.max(0, Math.min(window.innerHeight - 50, nt));
+    panel.style.left = nl + 'px';
+    panel.style.top = nt + 'px';
+  });
+  document.addEventListener('mouseup', function(){ isDown = false; });
+  /* 터치도 지원 */
+  header.addEventListener('touchstart', function(e){
+    if(e.target.tagName === 'BUTTON' || panel.classList.contains('minimized')) return;
+    var t = e.touches[0];
+    isDown = true;
+    sX = t.clientX; sY = t.clientY;
+    var r = panel.getBoundingClientRect();
+    startL = r.left; startT = r.top;
+    panel.style.left = startL + 'px';
+    panel.style.top = startT + 'px';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+  }, {passive:true});
+  document.addEventListener('touchmove', function(e){
+    if(!isDown) return;
+    var t = e.touches[0];
+    var nl = startL + (t.clientX - sX);
+    var nt = startT + (t.clientY - sY);
+    nl = Math.max(0, Math.min(window.innerWidth - 100, nl));
+    nt = Math.max(0, Math.min(window.innerHeight - 50, nt));
+    panel.style.left = nl + 'px';
+    panel.style.top = nt + 'px';
+  }, {passive:true});
+  document.addEventListener('touchend', function(){ isDown = false; });
+  /* 최소화 상태에서 헤더 클릭 시 복원 */
+  header.addEventListener('click', function(e){
+    if(panel.classList.contains('minimized') && e.target.tagName !== 'BUTTON'){
+      toggleMinBatchPanel();
+    }
+  });
+})();
+
+function toggleMinBatchPanel(){
+  var p = document.getElementById('batchResultsPanel');
+  var btn = document.getElementById('batchMinBtn');
+  if(!p) return;
+  p.classList.toggle('minimized');
+  if(btn) btn.textContent = p.classList.contains('minimized') ? '□' : '─';
+}
+
+/* ── 저장 전 위치 확인 다이얼로그 ── */
+function confirmLocationsBeforeSave(){
+  if(!window._batchResults) return;
+  var toSave = window._batchResults.filter(function(r){
+    return r.selected && r.status === 'success' && !r.saved;
+  });
+  if(toSave.length === 0){
+    toast('⚠ 선택된 항목이 없습니다');
+    return;
+  }
+  /* 사용자 결정을 임시 저장할 공간 */
+  window._lcPending = toSave.map(function(item){
+    var p = photos[item.photoIdx];
+    var addr = (p && p.gps && p.gps.address) ? p.gps.address : '';
+    var hasGPS = (p && p.gps && p.gps.lat);
+    return {
+      batchIdx: window._batchResults.indexOf(item),
+      photoIdx: item.photoIdx,
+      photoName: item.photoName,
+      pct: item.result ? item.result.avgPct : 0,
+      address: addr, /* 사용자 편집 가능 */
+      origAddress: addr, /* 원본 (비교용) */
+      hasGPS: hasGPS,
+      action: 'save' /* 'save' | 'delete' (위치 삭제하고 저장) | 'skip' */
+    };
+  });
+  renderLocConfirmList();
+  document.getElementById('locConfirmDialog').classList.add('show');
+}
+
+function renderLocConfirmList(){
+  var list = document.getElementById('lcList');
+  if(!list || !window._lcPending) return;
+  var html = '';
+  for(var i = 0; i < window._lcPending.length; i++){
+    var it = window._lcPending[i];
+    var warnCls = (!it.hasGPS || !it.address) ? ' warn' : '';
+    var statusHtml = '';
+    if(it.action === 'delete'){
+      statusHtml = '<div class="lc-status del">⚠ 위치 정보 없이 저장됨 (지도에 표시 안 됨)</div>';
+    } else if(!it.hasGPS){
+      statusHtml = '<div class="lc-status warn">⚠ EXIF GPS 없음 — 주소를 입력하거나 위치 삭제 후 저장하세요</div>';
+    } else if(!it.address){
+      statusHtml = '<div class="lc-status warn">⚠ 주소 변환 중 — 잠시 후 다시 확인하거나 직접 입력</div>';
+    } else {
+      statusHtml = '<div class="lc-status ok">✓ EXIF GPS로 자동 인식됨</div>';
+    }
+    
+    html += '<div class="lc-item' + warnCls + '" data-i="' + i + '">' +
+      '<div class="lc-item-top">' +
+        '<span class="lc-item-num">#' + (it.photoIdx + 1) + '</span>' +
+        '<span class="lc-item-pct">' + escapeHtml(it.photoName) + ' · ' + it.pct + '%</span>' +
+      '</div>' +
+      '<div class="lc-addr-row">' +
+        '<input type="text" class="lc-addr-input" placeholder="예: 경상북도 영천시 임고면" value="' + escapeHtml(it.address) + '" oninput="updateLcAddress(' + i + ', this.value)">' +
+        (it.action === 'delete' ?
+          '<button class="lc-del-btn" onclick="toggleLcDelete(' + i + ')" style="background:rgba(127,198,245,.15);border-color:rgba(127,198,245,.4);color:#7fc6f5">↺ 복원</button>' :
+          '<button class="lc-del-btn" onclick="toggleLcDelete(' + i + ')">🗑 위치 삭제</button>') +
+      '</div>' +
+      statusHtml +
+      '</div>';
+  }
+  list.innerHTML = html;
+}
+
+function updateLcAddress(i, value){
+  if(window._lcPending && window._lcPending[i]){
+    window._lcPending[i].address = value;
+    if(window._lcPending[i].action === 'delete') return;
+    /* 주소 입력하면 자동 OK 상태로 (시각 피드백) */
+  }
+}
+
+function toggleLcDelete(i){
+  if(window._lcPending && window._lcPending[i]){
+    window._lcPending[i].action = window._lcPending[i].action === 'delete' ? 'save' : 'delete';
+    renderLocConfirmList();
+  }
+}
+
+function closeLocConfirmDialog(){
+  document.getElementById('locConfirmDialog').classList.remove('show');
+  window._lcPending = null;
+}
+
+function executeBatchSaveWithLocations(){
+  if(!window._lcPending) return;
+  var pending = window._lcPending;
+  
+  /* 진단 로그 */
+  console.log('═══ [위치 확인 후 저장] ' + pending.length + '건 ═══');
+  for(var i = 0; i < pending.length; i++){
+    var it = pending[i];
+    var p = photos[it.photoIdx];
+    console.log('  [' + (i+1) + '] 사진 #' + (it.photoIdx+1) + ' / action=' + it.action + ' / address="' + it.address + '"');
+    
+    if(it.action === 'delete'){
+      /* 위치 정보 삭제하고 저장 */
+      if(p){
+        /* 백업했다가 저장 후 복원? — 아니, 저장된 record에만 위치 비우기 */
+        var origGps = p.gps;
+        p.gps = null; /* 일시적으로 GPS 제거해서 폴백도 안 타게 */
+        var prevRegion = currentRegion, prevAddress = currentAddress;
+        currentRegion = null; currentAddress = '';
+        var prevIdx = aIdx;
+        aIdx = it.photoIdx;
+        try{
+          saveBoxResult();
+          window._batchResults[it.batchIdx].saved = true;
+        } catch(e){ console.error('[Save delete] 오류:', e); }
+        finally{
+          aIdx = prevIdx;
+          currentRegion = prevRegion; currentAddress = prevAddress;
+          p.gps = origGps;
+        }
+        continue;
+      }
+    }
+    
+    /* 일반 저장 — 사용자가 편집한 주소를 사진 GPS에 반영 */
+    if(p){
+      if(it.address && it.address !== it.origAddress){
+        /* 사용자가 주소를 직접 입력/수정 */
+        if(!p.gps) p.gps = {lat:null, lon:null, source:'manual', address:'', region:null};
+        p.gps.address = it.address;
+        /* 도(region) 자동 감지 */
+        p.gps.region = detectRegion(p.gps.lat || 0, p.gps.lon || 0, it.address);
+        /* 시군구도 주소에서 간단 추출 */
+        var sigMatch = it.address.match(/([가-힣]+[시군구])/);
+        if(sigMatch) p.gps.sigungu = sigMatch[1];
+      }
+      var prevIdx2 = aIdx;
+      aIdx = it.photoIdx;
+      try{
+        saveBoxResult();
+        window._batchResults[it.batchIdx].saved = true;
+      } catch(e){ console.error('[Save] 오류:', e); }
+      finally{ aIdx = prevIdx2; }
+    }
+  }
+  
+  closeLocConfirmDialog();
+  toast('✅ ' + pending.length + '개 기록 저장 완료');
+  renderBatchResultsPanel();
+}
+</script>
 
 </body>
 </html>

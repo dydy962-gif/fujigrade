@@ -2664,6 +2664,26 @@ function batchSaveSelected(){
     return;
   }
   
+  /* ★ 2026-05-19 진단 로그: 저장 직전 사진별 GPS 상태 모두 출력 */
+  console.log('═══ [Batch Save] 저장 시작 — 총 ' + toSave.length + '건 ═══');
+  for(var di=0; di<toSave.length; di++){
+    var di_item = toSave[di];
+    var di_p = photos[di_item.photoIdx];
+    if(!di_p){ console.log('  [' + (di+1) + '] photoIdx=' + di_item.photoIdx + ' — 사진 없음'); continue; }
+    if(di_p.gps){
+      console.log('  [' + (di+1) + '] 사진 idx=' + di_item.photoIdx + 
+                  ' / source=' + di_p.gps.source + 
+                  ' / lat=' + (di_p.gps.lat ? di_p.gps.lat.toFixed(5) : 'X') + 
+                  ' / lon=' + (di_p.gps.lon ? di_p.gps.lon.toFixed(5) : 'X') +
+                  ' / region=' + (di_p.gps.region || 'X') +
+                  ' / sigungu=' + (di_p.gps.sigungu || 'X') +
+                  ' / address=' + (di_p.gps.address || 'X'));
+    } else {
+      console.log('  [' + (di+1) + '] 사진 idx=' + di_item.photoIdx + ' / ★ GPS 없음 (폴백: 전역 ' + currentRegion + ' / ' + currentAddress + ')');
+    }
+  }
+  console.log('═══════════════════════════════════════════');
+  
   var savedCnt = 0;
   for(var i = 0; i < toSave.length; i++){
     var item = toSave[i];
@@ -3909,7 +3929,12 @@ function addPhoto(file){
           /* ★ 2026-05-19 수정: 사진별 역지오코딩 — 각 사진에 자기 주소 저장
              일괄 저장 시 사진마다 다른 주소가 들어가도록 */
           reverseGeocodeForPhoto(obj, lat, lon);
+        } else {
+          /* ★ EXIF GPS 없음 — gpsScanned만 true로 설정해서 그리드에 ⚠ 표시 */
+          obj.gpsScanned=true;
+          console.warn('[Photo GPS] ⚠ 사진 #'+(idx+1)+' EXIF GPS 없음 — AI Vision 시도 또는 폴백 사용 예정');
         }
+        renderPhotoGrid(); /* GPS 표시 갱신 */
         /* GPS 유무와 상관없이 SAM3 검출 시작 */
         toast('🤖 사진 #'+(idx+1)+' SAM3 분석 시작');
         setTimeout(function(){
@@ -3917,6 +3942,7 @@ function addPhoto(file){
         }, 300);
       });
     } else {
+      obj.gpsScanned=true; /* file 없으면 GPS 시도 불가 */
       setTimeout(function(){ detectApplesInBox(obj, idx); }, 300);
     }
   });
@@ -3940,7 +3966,13 @@ function renderPhotoGrid(){
     }
     /* ★ GPS 인식 여부 표시 */
     if(p.gps&&p.gps.lat){
-      h+='<span style="position:absolute;top:3px;right:24px;background:rgba(127,198,245,.9);color:#fff;font-size:9px;padding:1px 4px;border-radius:6px" title="'+(p.gps.address||p.gps.source)+'">📍</span>';
+      var gpsTitle = p.gps.address || (p.gps.sigungu || '') + ' (' + p.gps.source + ')';
+      var gpsColor = p.gps.region ? 'rgba(127,198,245,.9)' : 'rgba(245,166,35,.9)';
+      var gpsIcon = p.gps.region ? '📍' : '⏳';
+      h+='<span style="position:absolute;top:3px;right:24px;background:'+gpsColor+';color:#fff;font-size:9px;padding:1px 4px;border-radius:6px" title="'+gpsTitle.replace(/"/g,'')+'">'+gpsIcon+'</span>';
+    } else if(p.gpsScanned){
+      /* GPS 스캔했지만 못 찾음 — 빨간 경고 */
+      h+='<span style="position:absolute;top:3px;right:24px;background:rgba(231,76,60,.9);color:#fff;font-size:9px;padding:1px 4px;border-radius:6px" title="GPS 없음 — 저장 시 현재 화면 주소로 폴백됨">⚠</span>';
     }
     if(p.res) h+='<span class="ph-pct">'+p.res.avg+'%</span>';
     h+='<button class="ph-x" onclick="delPhoto(event,'+i+')">×</button>';
@@ -4687,14 +4719,36 @@ function applyGPS(lat,lon,src,knownAddress){
 
 /* ── ★ 2026-05-19 추가: 사진별 역지오코딩 (전역 상태 안 건드림) ──
    각 사진마다 자기 obj.gps에 address와 region을 저장
-   이렇게 해야 일괄 저장 시 사진마다 다른 주소로 저장 가능 */
+   이렇게 해야 일괄 저장 시 사진마다 다른 주소로 저장 가능
+   
+   ★ 2026-05-19 v2 수정: Nominatim rate limit(초당 1회) 대응
+   여러 사진을 동시에 업로드할 때 큐로 순차 처리 — 각 요청 사이 1.2초 간격 */
+window._geocodeQueue = window._geocodeQueue || [];
+window._geocodeBusy = window._geocodeBusy || false;
+
 function reverseGeocodeForPhoto(photoObj, lat, lon){
   if(!photoObj || !lat || !lon) return;
-  var url='https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&addressdetails=1&zoom=14&accept-language=ko';
+  console.log('[Photo GPS Queue] 추가: 사진 idx=' + photos.indexOf(photoObj) + ' lat=' + lat.toFixed(5) + ' lon=' + lon.toFixed(5));
+  window._geocodeQueue.push({photoObj:photoObj, lat:lat, lon:lon});
+  processGeocodeQueue();
+}
+
+function processGeocodeQueue(){
+  if(window._geocodeBusy) return;
+  if(window._geocodeQueue.length === 0) return;
+  window._geocodeBusy = true;
+  var job = window._geocodeQueue.shift();
+  
+  var url='https://nominatim.openstreetmap.org/reverse?lat='+job.lat+'&lon='+job.lon+'&format=json&addressdetails=1&zoom=14&accept-language=ko';
+  console.log('[Photo GPS Queue] 처리 시작: 사진 idx=' + photos.indexOf(job.photoObj) + ' (남은 큐: ' + window._geocodeQueue.length + ')');
+  
   fetch(url)
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(d){
-      if(d.error || !d.address) return;
+      if(d.error || !d.address){
+        console.warn('[Photo GPS] 빈 응답: 사진 idx=' + photos.indexOf(job.photoObj));
+        return;
+      }
       var a=d.address;
       var sido=a.province||a.state||a.region||'';
       var sigungu=a.city||a.county||a.town||a.city_district||a.borough||'';
@@ -4702,7 +4756,6 @@ function reverseGeocodeForPhoto(photoObj, lat, lon){
       if(!eupmyeondong && a.town && a.town!==sigungu) eupmyeondong=a.town;
       if(eupmyeondong===sigungu) eupmyeondong='';
       var loc=(sido+' '+sigungu+' '+eupmyeondong).replace(/\s+/g,' ').trim();
-      /* display_name 폴백 */
       if(!loc && d.display_name){
         var parts=d.display_name.split(',');
         var clean=[];
@@ -4714,15 +4767,24 @@ function reverseGeocodeForPhoto(photoObj, lat, lon){
         clean.reverse();
         loc=clean.join(' ');
       }
-      if(loc && photoObj.gps){
-        photoObj.gps.address=loc;
-        photoObj.gps.region=detectRegion(lat,lon,loc);
-        photoObj.gps.sido=sido;
-        photoObj.gps.sigungu=sigungu;
-        console.log('[Photo GPS] 사진별 주소 저장:', loc, '→ region:', photoObj.gps.region);
+      if(loc && job.photoObj.gps){
+        job.photoObj.gps.address=loc;
+        job.photoObj.gps.region=detectRegion(job.lat,job.lon,loc);
+        job.photoObj.gps.sido=sido;
+        job.photoObj.gps.sigungu=sigungu;
+        console.log('[Photo GPS] ✓ 저장 완료 — 사진 idx=' + photos.indexOf(job.photoObj) + ' / 주소: ' + loc + ' / region: ' + job.photoObj.gps.region + ' / sigungu: ' + sigungu);
+      } else {
+        console.warn('[Photo GPS] 주소 추출 실패: 사진 idx=' + photos.indexOf(job.photoObj));
       }
     })
-    .catch(function(e){ console.warn('[Photo GPS] 역지오코딩 실패:', e.message); });
+    .catch(function(e){ console.warn('[Photo GPS] 역지오코딩 실패: 사진 idx=' + photos.indexOf(job.photoObj) + ' — ' + e.message); })
+    .then(function(){
+      /* Nominatim rate limit: 초당 1회 — 1.2초 텀 두고 다음 처리 */
+      setTimeout(function(){
+        window._geocodeBusy = false;
+        processGeocodeQueue();
+      }, 1200);
+    });
 }
 
 function getElev(m){
@@ -5135,7 +5197,11 @@ function usePhotoGPS(){
     btn.innerHTML='📷 EXIF 추출 중...';
     extractEXIF(p.file,function(lat,lon){
       if(lat&&lon){
+        /* ★ 2026-05-19: 사진별 obj.gps에도 저장 */
+        p.gps={lat:lat,lon:lon,source:'EXIF',address:null,region:null};
+        p.gpsScanned=true;
         applyGPS(lat,lon,'사진 EXIF');
+        reverseGeocodeForPhoto(p, lat, lon);
         btn.innerHTML='📷 사진 속 위치 사용<br><span style="font-size:10px;opacity:.7">EXIF GPS 자동 추출</span>';
         btn.classList.add('on');
         document.getElementById('gpsCurBtn').classList.remove('on');
@@ -5146,7 +5212,11 @@ function usePhotoGPS(){
       extractGPSFromImage(p.compressedUrl||p.url,function(lat2,lon2,addr){
         btn.innerHTML='📷 사진 속 위치 사용<br><span style="font-size:10px;opacity:.7">EXIF GPS 자동 추출</span>';
         if(lat2&&lon2){
+          /* ★ 2026-05-19: 사진별 obj.gps에 저장 */
+          p.gps={lat:lat2,lon:lon2,source:'사진텍스트',address:addr||null,region:null};
+          p.gpsScanned=true;
           applyGPS(lat2,lon2,'사진 텍스트',addr);  /* ★ 주소 함께 */
+          reverseGeocodeForPhoto(p, lat2, lon2);
           btn.classList.add('on');
           document.getElementById('gpsCurBtn').classList.remove('on');
           if(addr) setEV('envLoc',addr);
@@ -5463,10 +5533,12 @@ function scanWithClaudeVision(photoObj,idx){
       var obj=JSON.parse(jsonMatch[0]);
       /* ★ 사진별 GPS 저장 (currentLat 체크 제거) */
       if(obj.lat&&obj.lon){
-        photoObj.gps={lat:obj.lat,lon:obj.lon,source:'AI',address:obj.addr||null};
+        photoObj.gps={lat:obj.lat,lon:obj.lon,source:'AI',address:obj.addr||null,region:null};
         photoObj.gpsScanned=true;
         if(idx===aIdx) applyGPS(obj.lat,obj.lon,'사진 텍스트',obj.addr);
         toast('📍 사진 #'+(idx+1)+' AI 인식: '+(obj.addr||obj.lat.toFixed(3)+','+obj.lon.toFixed(3)));
+        /* ★ 2026-05-19: AI 인식한 좌표로도 사진별 역지오코딩 수행 (주소가 없거나 region 채워야 함) */
+        reverseGeocodeForPhoto(photoObj, obj.lat, obj.lon);
       } else if(obj.addr){
         /* 주소만 있는 경우 Nominatim으로 좌표 확보 */
         photoObj.pendingAddress=obj.addr;
@@ -5476,10 +5548,12 @@ function scanWithClaudeVision(photoObj,idx){
           .then(function(list){
             if(list&&list.length){
               var la=parseFloat(list[0].lat),lo=parseFloat(list[0].lon);
-              photoObj.gps={lat:la,lon:lo,source:'AI주소',address:obj.addr};
+              photoObj.gps={lat:la,lon:lo,source:'AI주소',address:obj.addr,region:null};
               photoObj.gpsScanned=true;
               if(idx===aIdx) applyGPS(la,lo,'AI 주소',obj.addr);
               toast('📍 사진 #'+(idx+1)+' 주소 인식: '+obj.addr);
+              /* ★ 2026-05-19: 좌표를 얻었으니 region 정확하게 채우기 */
+              reverseGeocodeForPhoto(photoObj, la, lo);
             } else if(idx===aIdx){
               document.getElementById('addrInput').value=obj.addr;
               document.getElementById('addrInputWrap').className='addr-input-wrap show';

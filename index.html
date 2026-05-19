@@ -33,6 +33,7 @@ img{max-width:100%;display:block}
 /* X-RAY 공통 모션 */
 @keyframes pageFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes tabSlide{from{opacity:0}to{opacity:1}}
+@keyframes dotBlink{0%,100%{opacity:.3}50%{opacity:1}}
 .page.active{animation:pageFadeIn .35s ease-out both}
 
 /* 스크롤바도 X-RAY 톤 */
@@ -1262,6 +1263,8 @@ function hideKreiSplash(){
 
     <div class="section-label" style="margin-bottom:10px">지역별 기록</div>
     <div class="rec-region-tabs" id="recRegionTabs"></div>
+    <!-- ★ 2026-05-19 추가: 선택된 도의 시·군별 통계 (도 탭 선택 시 표시) -->
+    <div id="recCityStats" style="display:none"></div>
     <div id="recContent">
       <div class="rec-empty">저장된 기록이 없습니다.<br>판정 후 저장하면 여기에 표시됩니다.</div>
     </div>
@@ -2404,20 +2407,52 @@ function tryAutoMeasure(photoObj){
   }
 }
 
-/* 결과 패널에 1건 추가 */
+/* ★ 2026-05-19 추가: 사진 업로드 시 processing 상태로 미리 등록
+   사용자가 진행 상황 확인 + 순서 정렬 가능하게 */
+function addBatchResultProcessing(photoObj){
+  if(!window._batchResults) window._batchResults = [];
+  var pIdx = photos.indexOf(photoObj);
+  if(pIdx < 0) return;
+  /* 이미 등록되어 있으면 skip */
+  var exists = window._batchResults.find(function(r){ return r.photoIdx === pIdx; });
+  if(exists) return;
+  
+  window._batchResults.push({
+    photoIdx: pIdx,
+    photoName: photoObj.name || ('사진 ' + (pIdx+1)),
+    photoMode: photoObj.mode || 'top',
+    status: 'processing',
+    result: null,
+    selected: false,
+    saved: false
+  });
+  renderBatchResultsPanel();
+}
+
+/* 결과 패널에 1건 추가 — 기존 processing 항목 있으면 업데이트, 없으면 새로 추가 */
 function addBatchResult(photoObj, result, status){
   if(!window._batchResults) window._batchResults = [];
+  var pIdx = photos.indexOf(photoObj);
   
-  var item = {
-    photoIdx: photos.indexOf(photoObj),
-    photoName: photoObj.name || ('사진 ' + (photos.indexOf(photoObj)+1)),
-    photoMode: photoObj.mode || 'top',
-    status: status, /* 'success' | 'detect_failed' | 'measure_failed' */
-    result: result,
-    selected: status === 'success', /* 성공한 것만 기본 선택 */
-    saved: false
-  };
-  window._batchResults.push(item);
+  /* ★ 기존 processing 항목 찾아서 업데이트 */
+  var existing = window._batchResults.find(function(r){ return r.photoIdx === pIdx; });
+  if(existing){
+    existing.status = status;
+    existing.result = result;
+    existing.selected = (status === 'success'); /* 성공한 것만 기본 선택 */
+    existing.photoMode = photoObj.mode || existing.photoMode;
+  } else {
+    var item = {
+      photoIdx: pIdx,
+      photoName: photoObj.name || ('사진 ' + (pIdx+1)),
+      photoMode: photoObj.mode || 'top',
+      status: status, /* 'success' | 'detect_failed' | 'measure_failed' */
+      result: result,
+      selected: status === 'success',
+      saved: false
+    };
+    window._batchResults.push(item);
+  }
   
   renderBatchResultsPanel();
 }
@@ -2477,18 +2512,37 @@ function renderBatchResultsPanel(){
     saveBothBtn.style.cursor = bothCnt > 0 ? 'pointer' : 'not-allowed';
   }
   
-  /* 카드 목록 렌더링 */
+  /* 카드 목록 렌더링 — ★ 2026-05-19: photoIdx 순서로 정렬 (앞쪽 사진부터 표시) */
   var html = '';
-  for(var i = 0; i < results.length; i++){
-    var item = results[i];
+  var sorted = results.slice().sort(function(a,b){ return (a.photoIdx||0) - (b.photoIdx||0); });
+  for(var i = 0; i < sorted.length; i++){
+    var item = sorted[i];
+    /* 원본 인덱스 (저장 등의 액션에서 사용) */
+    var origIdx = results.indexOf(item);
     var disabled = item.status !== 'success';
     var savedStyle = item.saved ? 'opacity:.4;text-decoration:line-through' : '';
+    /* 사진 번호 (1-indexed) */
+    var photoNum = (item.photoIdx >= 0 ? item.photoIdx + 1 : '?');
+    
+    if(item.status === 'processing'){
+      /* ★ 분석 중 상태 — 클릭하면 해당 사진으로 이동 */
+      html += '<div data-batch-idx="' + origIdx + '" style="display:flex;align-items:center;gap:8px;padding:10px;background:rgba(170,100,255,.08);border:1px solid rgba(170,100,255,.3);border-radius:6px;margin-bottom:5px;cursor:pointer" onclick="openBatchItem(' + origIdx + ', event)" title="클릭하면 진행 상황 보기">' +
+        '<div style="width:30px;height:30px;border-radius:6px;background:rgba(170,100,255,.2);border:2px solid #aa64ff;display:flex;align-items:center;justify-content:center;color:#aa64ff;font-weight:700;font-size:11px;flex-shrink:0">' + photoNum + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:12px;font-weight:600;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(item.photoName) + '</div>' +
+          '<div style="font-size:10px;color:#aa64ff;font-family:var(--mm)">🎯 분석 중... · 클릭해서 진행 보기</div>' +
+        '</div>' +
+        '<span style="color:#aa64ff;font-size:14px;flex-shrink:0;animation:dotBlink 1.4s ease-in-out infinite">⋯</span>' +
+        '</div>';
+      continue;
+    }
     
     if(item.saved){
       /* 저장됨 — 회색 표시 */
       html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;margin-bottom:5px;'+savedStyle+'">' +
-        '<div style="width:24px;height:24px;border-radius:6px;background:#4a5e4a;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:10px">✓</div>' +
+        '<div style="width:24px;height:24px;border-radius:6px;background:#4a5e4a;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:10px">' + photoNum + '</div>' +
         '<div style="flex:1;font-size:11px;color:rgba(255,255,255,.6)">' + escapeHtml(item.photoName) + ' · 저장됨</div>' +
+        '<span style="color:#4a5e4a;font-size:14px;flex-shrink:0">✓</span>' +
         '</div>';
       continue;
     }
@@ -2507,12 +2561,19 @@ function renderBatchResultsPanel(){
       var bgColor = warnIcon ? 'rgba(232,160,32,.1)' : 'rgba(127,198,245,.08)';
       var borderColor = warnIcon ? 'rgba(232,160,32,.4)' : 'rgba(127,198,245,.3)';
       
-      html += '<div data-batch-idx="' + i + '" style="display:flex;align-items:center;gap:8px;padding:10px;background:'+bgColor+';border:1px solid '+borderColor+';border-radius:6px;margin-bottom:5px;cursor:pointer" onclick="openBatchItem(' + i + ', event)">' +
-        '<input type="checkbox" ' + (item.selected ? 'checked' : '') + ' onclick="event.stopPropagation();toggleBatchItem(' + i + ', this.checked)" style="margin:0;cursor:pointer;accent-color:#a0d7fa">' +
-        '<div style="width:30px;height:30px;border-radius:6px;background:'+card.color+';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:11px;flex-shrink:0">' + card.l + '</div>' +
+      /* ★ 사진별 주소 표시 */
+      var addrText = '';
+      if(item.photoIdx >= 0 && photos[item.photoIdx] && photos[item.photoIdx].gps && photos[item.photoIdx].gps.address){
+        var addr = photos[item.photoIdx].gps.address;
+        addrText = ' · 📍 ' + (addr.length > 12 ? addr.slice(0,12)+'..' : addr);
+      }
+      
+      html += '<div data-batch-idx="' + origIdx + '" style="display:flex;align-items:center;gap:8px;padding:10px;background:'+bgColor+';border:1px solid '+borderColor+';border-radius:6px;margin-bottom:5px;cursor:pointer" onclick="openBatchItem(' + origIdx + ', event)">' +
+        '<input type="checkbox" ' + (item.selected ? 'checked' : '') + ' onclick="event.stopPropagation();toggleBatchItem(' + origIdx + ', this.checked)" style="margin:0;cursor:pointer;accent-color:#a0d7fa">' +
+        '<div style="width:30px;height:30px;border-radius:6px;background:'+card.color+';display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:11px;flex-shrink:0" title="사진 #' + photoNum + '">' + card.l + '</div>' +
         '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:12px;font-weight:600;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(item.photoName) + '</div>' +
-          '<div style="font-size:10px;color:rgba(255,255,255,.6);font-family:var(--mm)">' + r.avgPct + '% · ' + modeKr + ' · 사과 ' + r.count + '개' + warnMsg + '</div>' +
+          '<div style="font-size:12px;font-weight:600;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">#' + photoNum + ' · ' + escapeHtml(item.photoName) + '</div>' +
+          '<div style="font-size:10px;color:rgba(255,255,255,.6);font-family:var(--mm)">' + r.avgPct + '% · ' + modeKr + ' · 사과 ' + r.count + '개' + warnMsg + addrText + '</div>' +
         '</div>' +
         '<span style="color:' + (warnIcon ? '#e8a020' : '#7fc6f5') + ';font-size:14px;flex-shrink:0">' + (warnIcon || '✓') + '</span>' +
         '</div>';
@@ -2521,7 +2582,7 @@ function renderBatchResultsPanel(){
       var failMsg = item.status === 'detect_failed' ? 'SAM3 검출 실패' : '측정 실패';
       html += '<div style="display:flex;align-items:center;gap:8px;padding:10px;background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.3);border-radius:6px;margin-bottom:5px;opacity:.7">' +
         '<input type="checkbox" disabled style="margin:0">' +
-        '<div style="width:30px;height:30px;border-radius:6px;background:#444;display:flex;align-items:center;justify-content:center;color:#888;font-weight:700;font-size:11px;flex-shrink:0">—</div>' +
+        '<div style="width:30px;height:30px;border-radius:6px;background:#444;display:flex;align-items:center;justify-content:center;color:#888;font-weight:700;font-size:11px;flex-shrink:0">' + photoNum + '</div>' +
         '<div style="flex:1;min-width:0">' +
           '<div style="font-size:12px;font-weight:600;color:rgba(255,255,255,.6)">' + escapeHtml(item.photoName) + '</div>' +
           '<div style="font-size:10px;color:#ff8b8b">✗ ' + failMsg + '</div>' +
@@ -2569,7 +2630,16 @@ function openBatchItem(idx, ev){
   if(item.photoIdx < 0 || !photos[item.photoIdx]) return;
   aIdx = item.photoIdx;
   redraw();
-  showBoxResult(photos[aIdx]);
+  
+  /* ★ 2026-05-19: 진행 중이면 토스트 안내, 성공이면 결과 표시 */
+  if(item.status === 'processing'){
+    toast('🎯 사진 #' + (item.photoIdx+1) + ' 분석 중 — 위쪽 화면에서 진행 상황 확인');
+  } else if(item.status === 'success'){
+    showBoxResult(photos[aIdx]);
+  } else {
+    toast('⚠ 사진 #' + (item.photoIdx+1) + ' 측정 실패 — 다시 시도하세요');
+  }
+  
   /* 결과 화면으로 스크롤 */
   setTimeout(function(){
     var el = document.querySelector('.canvas-section') || document.body;
@@ -3593,23 +3663,49 @@ function saveBoxResult(){
   var r = p.boxResult;
   
   var records = loadAllRecords();
+  
+  /* ★ 2026-05-19 수정: 사진별 GPS 우선 사용
+     사진에 EXIF GPS가 있으면 그 주소/지역을 쓰고,
+     없을 때만 전역 currentRegion/currentAddress를 폴백으로 사용 */
+  var photoRegion = null;
+  var photoAddress = '';
+  var photoSido = '';
+  var photoSigungu = '';
+  
+  if(p.gps && p.gps.lat && p.gps.region){
+    /* 사진별 GPS 사용 */
+    photoRegion = p.gps.region;
+    photoAddress = p.gps.address || '';
+    photoSido = p.gps.sido || '';
+    photoSigungu = p.gps.sigungu || '';
+    console.log('[Save] 사진별 GPS 사용:', photoRegion, photoAddress);
+  } else {
+    /* 폴백: 전역 변수 */
+    photoRegion = currentRegion;
+    photoAddress = currentAddress || '';
+    console.log('[Save] 폴백 - 전역 변수 사용:', photoRegion, photoAddress);
+  }
+  
   var rname = '';
-  if(currentRegion){
+  if(photoRegion){
     var regionData = loadRegionData();
-    if(regionData[currentRegion]) rname = regionData[currentRegion].name;
+    if(regionData[photoRegion]) rname = regionData[photoRegion].name;
   }
   
   var record = {
-    id: Date.now(),
+    id: Date.now() + Math.floor(Math.random()*1000), /* 일괄 저장 시 id 중복 방지 */
     date: new Date().toISOString().slice(0,10),
     harvestDate: document.getElementById('harvestDate').value||'',
     pct: r.avgPct,
     grade: r.avgGrade,
     gradeName: r.avgGradeName,
     gradeColor: getCard(r.avgPct).color,
-    region: currentRegion,
+    region: photoRegion,
     regionName: rname,
-    address: currentAddress||'',
+    address: photoAddress,
+    /* ★ 시/도/시군구 별도 저장 — 도별/시별 통계용 */
+    sido: photoSido,
+    sigungu: photoSigungu,
     cnt: r.count,
     conf: 95, /* 픽셀 단위 측정이라 신뢰도 높음 */
     sc: 95,
@@ -3622,27 +3718,25 @@ function saveBoxResult(){
       individual: r.apples
     },
     weather: null,
-    /* ★ 2026-05-17 추가: 상부/하부 구분 (평균내기용)
-       p.mode가 'top'/'bottom'/'both' 중 하나
-       'both'는 사용 안 함(현재 코드 흐름상 상부 또는 하부 둘 중 하나로 분류) */
+    /* ★ 2026-05-17 추가: 상부/하부 구분 (평균내기용) */
     photoMode: p.mode || 'top'
   };
   
   records.push(record);
   saveAllRecords(records);
   
-  /* 도별 통계 갱신 */
-  if(currentRegion){
-    var regionData = loadRegionData();
-    if(!regionData[currentRegion]) regionData[currentRegion] = {name: rname, count:0, sum:0, avg:0};
-    regionData[currentRegion].count++;
-    regionData[currentRegion].sum += r.avgPct;
-    regionData[currentRegion].avg = Math.round(regionData[currentRegion].sum / regionData[currentRegion].count * 10) / 10;
-    saveRegionData(regionData);
+  /* 도별 통계 갱신 — 사진별 region 기준 */
+  if(photoRegion){
+    var regionData2 = loadRegionData();
+    if(!regionData2[photoRegion]) regionData2[photoRegion] = {name: rname, count:0, sum:0, avg:0};
+    regionData2[photoRegion].count++;
+    regionData2[photoRegion].sum += r.avgPct;
+    regionData2[photoRegion].avg = Math.round(regionData2[photoRegion].sum / regionData2[photoRegion].count * 10) / 10;
+    saveRegionData(regionData2);
   }
   
   p.saved = true;
-  toast('💾 박스 측정 저장됨 ('+r.count+'개 사과, 평균 '+r.avgPct+'%)');
+  toast('💾 박스 측정 저장됨 ('+r.count+'개 사과, 평균 '+r.avgPct+'%, '+(rname||'위치미상')+')');
   renderStatsMemo();
   initKoreaMap();
 }
@@ -3801,14 +3895,20 @@ function addPhoto(file){
     photos.push(obj);
     renderPhotoGrid();
     selPhoto(idx);
+    /* ★ 2026-05-19 추가: 일괄 결과 패널에 처음부터 processing 상태로 등록
+       사용자가 진행 상황 보고 클릭 가능하도록 */
+    addBatchResultProcessing(obj);
     /* EXIF GPS 먼저 추출 (주소/날씨용) */
     if(obj.file){
       extractEXIF(obj.file,function(lat,lon){
         if(lat&&lon){
-          obj.gps={lat:lat,lon:lon,source:'EXIF',address:null};
+          obj.gps={lat:lat,lon:lon,source:'EXIF',address:null,region:null};
           obj.gpsScanned=true;
           if(idx===aIdx) applyGPS(lat,lon,'사진 EXIF');
           toast('📍 사진 #'+(idx+1)+' EXIF GPS 인식');
+          /* ★ 2026-05-19 수정: 사진별 역지오코딩 — 각 사진에 자기 주소 저장
+             일괄 저장 시 사진마다 다른 주소가 들어가도록 */
+          reverseGeocodeForPhoto(obj, lat, lon);
         }
         /* GPS 유무와 상관없이 SAM3 검출 시작 */
         toast('🤖 사진 #'+(idx+1)+' SAM3 분석 시작');
@@ -4583,6 +4683,46 @@ function applyGPS(lat,lon,src,knownAddress){
     }).catch(function(){});
   loadWeatherGrid(lat,lon);
   updateMapDot(lat,lon);
+}
+
+/* ── ★ 2026-05-19 추가: 사진별 역지오코딩 (전역 상태 안 건드림) ──
+   각 사진마다 자기 obj.gps에 address와 region을 저장
+   이렇게 해야 일괄 저장 시 사진마다 다른 주소로 저장 가능 */
+function reverseGeocodeForPhoto(photoObj, lat, lon){
+  if(!photoObj || !lat || !lon) return;
+  var url='https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lon+'&format=json&addressdetails=1&zoom=14&accept-language=ko';
+  fetch(url)
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(d){
+      if(d.error || !d.address) return;
+      var a=d.address;
+      var sido=a.province||a.state||a.region||'';
+      var sigungu=a.city||a.county||a.town||a.city_district||a.borough||'';
+      var eupmyeondong=a.village||a.hamlet||a.neighbourhood||a.suburb||a.quarter||'';
+      if(!eupmyeondong && a.town && a.town!==sigungu) eupmyeondong=a.town;
+      if(eupmyeondong===sigungu) eupmyeondong='';
+      var loc=(sido+' '+sigungu+' '+eupmyeondong).replace(/\s+/g,' ').trim();
+      /* display_name 폴백 */
+      if(!loc && d.display_name){
+        var parts=d.display_name.split(',');
+        var clean=[];
+        for(var i=0;i<parts.length&&clean.length<4;i++){
+          var p=parts[i].trim();
+          if(!p||/^\d/.test(p)||p==='대한민국'||p==='South Korea') continue;
+          clean.push(p);
+        }
+        clean.reverse();
+        loc=clean.join(' ');
+      }
+      if(loc && photoObj.gps){
+        photoObj.gps.address=loc;
+        photoObj.gps.region=detectRegion(lat,lon,loc);
+        photoObj.gps.sido=sido;
+        photoObj.gps.sigungu=sigungu;
+        console.log('[Photo GPS] 사진별 주소 저장:', loc, '→ region:', photoObj.gps.region);
+      }
+    })
+    .catch(function(e){ console.warn('[Photo GPS] 역지오코딩 실패:', e.message); });
 }
 
 function getElev(m){
@@ -5983,6 +6123,55 @@ function renderRecordsPage(){
   /* 해당 탭 기록 필터 (지역별) */
   var filtered=activeTab==='all'?records:records.filter(function(r){return r.region===activeTab;});
   
+  /* ★ 2026-05-19 추가: 특정 도 선택 시 시별 통계 표시 */
+  var cityStatsEl = document.getElementById('recCityStats');
+  if(cityStatsEl){
+    if(activeTab !== 'all'){
+      var cityGroups = {};
+      var rDoFiltered = records.filter(function(r){return r.region===activeTab;});
+      for(var ci=0;ci<rDoFiltered.length;ci++){
+        var rec = rDoFiltered[ci];
+        var cityKey = rec.sigungu || '위치미상';
+        if(!cityGroups[cityKey]) cityGroups[cityKey] = {count:0, sum:0, records:[]};
+        cityGroups[cityKey].count++;
+        cityGroups[cityKey].sum += rec.pct;
+        cityGroups[cityKey].records.push(rec);
+      }
+      
+      var cities = Object.keys(cityGroups).sort();
+      if(cities.length > 0){
+        var cityHtml = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);padding:12px 14px;margin-bottom:14px">';
+        cityHtml += '<div style="font-family:var(--mm);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">━ ' + escapeHtml(usedRegions[activeTab]||activeTab) + ' 시·군별 통계</div>';
+        cityHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+        for(var cI=0;cI<cities.length;cI++){
+          var c = cities[cI];
+          var g = cityGroups[c];
+          var avg = Math.round(g.sum/g.count*10)/10;
+          var isActiveCity = (window._recActiveCity===c);
+          cityHtml += '<button onclick="setRecCity(\''+c.replace(/'/g,'\\\'')+'\')" style="padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--fm);border:1px solid '+(isActiveCity?'var(--action)':'var(--border)')+';background:'+(isActiveCity?'var(--action-soft)':'var(--bg3)')+';color:'+(isActiveCity?'var(--action)':'var(--cream2)')+';transition:all .15s">📍 '+escapeHtml(c)+' <span style="opacity:.6;font-family:var(--mm);font-size:10px;margin-left:4px">'+g.count+'건·평균'+avg+'%</span></button>';
+        }
+        if(window._recActiveCity){
+          cityHtml += '<button onclick="setRecCity(null)" style="padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--fm);border:1px solid var(--border);background:transparent;color:var(--muted)">✕ 전체보기</button>';
+        }
+        cityHtml += '</div></div>';
+        cityStatsEl.innerHTML = cityHtml;
+        cityStatsEl.style.display = 'block';
+      } else {
+        cityStatsEl.style.display = 'none';
+      }
+    } else {
+      cityStatsEl.style.display = 'none';
+      window._recActiveCity = null;
+    }
+  }
+  
+  /* ★ 시(시군구) 필터 적용 */
+  if(activeTab !== 'all' && window._recActiveCity){
+    filtered = filtered.filter(function(r){
+      return (r.sigungu || '위치미상') === window._recActiveCity;
+    });
+  }
+  
   /* ── 상부/하부 필터 (2026-05-17 추가) ──
      window._recModeFilter: 'all' | 'top' | 'bottom'
      photoMode 필드가 없는 옛 기록은 top으로 폴백 (saveBoxResult와 일관) */
@@ -6608,7 +6797,16 @@ function hexToRgb(hex){
 }
 
 function setRecTab(tab){
+  /* ★ 도 변경 시 시 필터 리셋 */
+  if(window._recActiveTab !== tab) window._recActiveCity = null;
   window._recActiveTab=tab;
+  renderRecordsPage();
+}
+
+/* ★ 2026-05-19 추가: 시(시군구) 필터 — 같은 시 클릭하면 해제 */
+function setRecCity(city){
+  if(window._recActiveCity === city) window._recActiveCity = null;
+  else window._recActiveCity = city;
   renderRecordsPage();
 }
 

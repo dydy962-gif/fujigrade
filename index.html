@@ -1991,10 +1991,23 @@ function detectApplesInBox(photoObj, idx){
       if(res.needsKey){
         toast('⚠ Claude API 키 필요');
         setBoxStatus('keyMissing');
-      } else {
-        toast('⚠ AI 색 분석 실패: ' + res.error);
-        setBoxStatus('error');
+        /* 키 없으면 SAM3 호출 불가 — 검출 실패로 마킹 */
+        addBatchResult(photoObj, null, 'detect_failed');
+        return;
       }
+      /* ★ 2026-05-19 v6 핵심 버그 수정:
+         AI 색 보정 실패해도 SAM3는 호출 가능 → 보정 없이 원본으로 측정.
+         이전엔 여기서 return해서 SAM3 큐에 들어가지도 못함 → 19장 통째 누락 버그. */
+      console.warn('[Phase1] AI 실패 — 색 보정 없이 원본으로 SAM3 호출');
+      toast('⚠ 색 보정 건너뛰고 SAM3 진행');
+      photoObj.aiAnalysis = {tray_white_rgb: null, tray_visible: false};
+      photoObj.trayAvgRGB = null;
+      photoObj.correctedCanvas = null;
+      photoObj.correctedUrl = photoObj.compressedUrl;
+      photoObj.wbInfo = {applied: false, reason: 'AI 호출 실패: ' + res.error};
+      setTimeout(function(){
+        callSAM3(photoObj, idx);
+      }, 400);
       return;
     }
     
@@ -5139,7 +5152,72 @@ var AIConfig = {
      prompt: AI에게 보낼 질문 (한국어 가능)
      options: {maxTokens: 600, temperature: 0}
    반환: Promise<{success, text, error, provider}> */
+/* ★ 2026-05-19 v5 추가: callAI 호출 큐 (Anthropic 429 방지)
+   동시 호출 1개로 제한 + 호출 사이 500ms 텀
+   사진 13장 동시 처리 시 429 에러 났던 문제 해결 */
+window._aiCallQueue = window._aiCallQueue || [];
+window._aiCallBusy = window._aiCallBusy || false;
+window._aiCallStats = {pending:0, completed:0, failed:0};
+
 function callAI(imageDataUrl, prompt, options){
+  /* 큐에 등록하고 Promise 반환 */
+  return new Promise(function(resolve){
+    window._aiCallQueue.push({imageDataUrl:imageDataUrl, prompt:prompt, options:options, resolve:resolve});
+    window._aiCallStats.pending++;
+    console.log('[AI Queue] 추가 — 대기 중 ' + window._aiCallQueue.length + '건');
+    processAiCallQueue();
+  });
+}
+
+function processAiCallQueue(){
+  if(window._aiCallBusy) return;
+  if(window._aiCallQueue.length === 0) return;
+  window._aiCallBusy = true;
+  var job = window._aiCallQueue.shift();
+  
+  console.log('[AI Queue] 처리 시작 — 남은 ' + window._aiCallQueue.length + '건');
+  callAIDirect(job.imageDataUrl, job.prompt, job.options)
+    .then(function(res){
+      /* ★ 2026-05-19 v6: 429 에러면 자동 재시도 (최대 2회) */
+      if(!res.success && res.error && res.error.indexOf('429') >= 0){
+        job._retryCount = (job._retryCount || 0) + 1;
+        if(job._retryCount <= 2){
+          console.warn('[AI Queue] 429 발생 — ' + (job._retryCount * 3) + '초 후 재시도 (' + job._retryCount + '/2)');
+          /* 큐 앞쪽에 다시 넣어서 우선 재시도 */
+          window._aiCallQueue.unshift(job);
+          window._aiCallStats.pending--; /* 카운트 보정 */
+          window._aiCallStats.pending++;
+          /* 텀을 길게 두고 재시도 */
+          setTimeout(function(){
+            window._aiCallBusy = false;
+            processAiCallQueue();
+          }, job._retryCount * 3000); /* 3초, 6초 */
+          return;
+        }
+      }
+      window._aiCallStats.pending--;
+      if(res.success) window._aiCallStats.completed++;
+      else window._aiCallStats.failed++;
+      job.resolve(res);
+      /* 다음 처리 */
+      setTimeout(function(){
+        window._aiCallBusy = false;
+        processAiCallQueue();
+      }, 800); /* 500ms → 800ms로 늘림 (429 빈도 감소) */
+    })
+    .catch(function(e){
+      window._aiCallStats.pending--;
+      window._aiCallStats.failed++;
+      job.resolve({success:false, text:null, error:e.message||'알 수 없는 오류'});
+      setTimeout(function(){
+        window._aiCallBusy = false;
+        processAiCallQueue();
+      }, 800);
+    });
+}
+
+/* 실제 AI 호출 (이전 callAI 본체) */
+function callAIDirect(imageDataUrl, prompt, options){
   options=options||{};
   var cfg=AIConfig.get();
   var keyInfo=AIConfig.getActiveKey();
@@ -7127,6 +7205,7 @@ initVarietyUI();
   position:fixed;
   top:80px; right:20px;
   width:380px;
+  height:560px; /* ★ 기본 높이 추가 — 본문 스크롤 작동에 필수 */
   background:#0a0a0a;
   border:1px solid rgba(160,215,250,.4);
   border-radius:12px;
@@ -7205,15 +7284,86 @@ initVarietyUI();
   transition:background .15s;
 }
 .batch-ctrl-btn:hover{background:rgba(255,255,255,.12);color:white}
-#batchResultsPanel .batch-body{
-  overflow-y:auto;
-  padding:10px;
-  height:calc(100% - 48px - 130px); /* 헤더 + 푸터 제외 */
+
+/* ★ 2026-05-19 v5: flexbox 레이아웃으로 — 본문이 남는 공간 다 차지 + 자동 스크롤 */
+#batchResultsPanel{
+  display:flex;
+  flex-direction:column;
 }
+#batchResultsPanel.minimized{
+  display:block; /* 미니바일 땐 flexbox 해제 */
+}
+#batchResultsPanel .batch-header{flex-shrink:0}
+#batchResultsPanel .batch-toolbar{flex-shrink:0}
+#batchResultsPanel .batch-footer{flex-shrink:0}
+#batchResultsPanel .batch-body{
+  flex:1; /* 남는 공간 다 차지 */
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:10px;
+  min-height:120px; /* 최소 높이 보장 */
+}
+/* 스크롤바 — 검정 톤에 맞게 */
+#batchResultsPanel .batch-body::-webkit-scrollbar{width:6px}
+#batchResultsPanel .batch-body::-webkit-scrollbar-track{background:transparent}
+#batchResultsPanel .batch-body::-webkit-scrollbar-thumb{background:rgba(160,215,250,.25);border-radius:3px}
+#batchResultsPanel .batch-body::-webkit-scrollbar-thumb:hover{background:rgba(160,215,250,.45)}
+
+/* ★ 상단 툴바 — 저장/체크 버튼 영역 */
+.batch-toolbar{
+  background:rgba(0,0,0,.3);
+  border-bottom:1px solid rgba(160,215,250,.12);
+  padding:8px 10px;
+}
+.batch-toolbar-row1{
+  display:flex;gap:5px;align-items:center;margin-bottom:6px;
+}
+.batch-toolbar-row2{
+  display:flex;gap:5px;
+}
+.batch-tb-spacer{flex:1}
+.batch-tb-mini{
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.12);
+  color:rgba(255,255,255,.7);
+  font-size:10px;font-weight:500;
+  padding:4px 9px;border-radius:5px;cursor:pointer;
+  font-family:var(--fm);letter-spacing:-.2px;
+}
+.batch-tb-mini:hover{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25)}
+.batch-tb-action{
+  padding:9px 8px;border-radius:6px;
+  font-weight:700;font-size:12px;cursor:pointer;
+  font-family:var(--fm);border:none;
+  white-space:nowrap;letter-spacing:-.3px;
+  transition:filter .15s, transform .1s;
+}
+.batch-tb-action:hover{filter:brightness(1.08)}
+.batch-tb-action:active{transform:scale(.97)}
+.batch-tb-action.primary{
+  flex:1.4;
+  background:var(--action);color:#0a0a0a;
+}
+.batch-tb-action.secondary{
+  flex:1;
+  background:rgba(160,215,250,.12);
+  border:1px solid rgba(160,215,250,.4);
+  color:#a0d7fa;
+}
+.batch-tb-action.tertiary{
+  flex:0 0 auto;width:48px;
+  background:rgba(127,198,245,.1);
+  border:1px solid rgba(127,198,245,.35);
+  color:#7fc6f5;font-size:14px;
+  padding:9px 4px;
+}
+/* 미니바 상태에서는 툴바 숨김 */
+#batchResultsPanel.minimized .batch-toolbar{display:none}
+
 #batchResultsPanel .batch-footer{
-  padding:10px 14px;
-  border-top:1px solid rgba(160,215,250,.2);
-  background:rgba(0,0,0,.25);
+  padding:8px 14px;
+  border-top:1px solid rgba(160,215,250,.12);
+  background:rgba(0,0,0,.2);
 }
 #batchResultsPanel.minimized{cursor:pointer}
 
@@ -7305,22 +7455,28 @@ initVarietyUI();
       </div>
     </div>
     <div class="batch-header-controls">
-      <button class="batch-ctrl-btn" onclick="event.stopPropagation();batchSelectAll()" title="전체 선택">☑</button>
-      <button class="batch-ctrl-btn" onclick="event.stopPropagation();batchSelectNone()" title="해제">☐</button>
       <button class="batch-ctrl-btn" onclick="event.stopPropagation();toggleMinBatchPanel()" title="최소화/복원" id="batchMinBtn">─</button>
       <button class="batch-ctrl-btn" onclick="event.stopPropagation();closeBatchResultsPanel()" title="닫기">×</button>
+    </div>
+  </div>
+  <!-- ★ 상단 툴바 — 저장/체크 버튼들 -->
+  <div class="batch-toolbar">
+    <div class="batch-toolbar-row1">
+      <button class="batch-tb-mini" onclick="batchSelectAll()" title="전체 선택">☑ 전체</button>
+      <button class="batch-tb-mini" onclick="batchSelectNone()" title="해제">☐ 해제</button>
+      <span class="batch-tb-spacer"></span>
+    </div>
+    <div class="batch-toolbar-row2">
+      <button id="batchSaveBtn" onclick="confirmLocationsBeforeSave()" class="batch-tb-action primary">💾 데이터 저장</button>
+      <button id="batchSaveImgBtn" onclick="batchSaveImages()" class="batch-tb-action secondary">📥 이미지</button>
+      <button id="batchSaveBothBtn" onclick="batchSaveBoth()" class="batch-tb-action tertiary" title="데이터 + 이미지 한번에">💾📥</button>
     </div>
   </div>
   <div class="batch-body">
     <div id="batchResultsList"></div>
   </div>
   <div class="batch-footer">
-    <div style="display:flex;gap:6px;margin-bottom:6px">
-      <button id="batchSaveBtn" onclick="confirmLocationsBeforeSave()" style="flex:1;padding:10px;background:var(--action);border:none;color:#0a0a0a;font-weight:700;font-size:12px;border-radius:6px;cursor:pointer">💾 데이터 저장</button>
-      <button id="batchSaveImgBtn" onclick="batchSaveImages()" style="flex:1;padding:10px;background:rgba(160,215,250,.15);border:1px solid #a0d7fa;color:#a0d7fa;font-weight:700;font-size:12px;border-radius:6px;cursor:pointer">📥 이미지 저장</button>
-    </div>
-    <button id="batchSaveBothBtn" onclick="batchSaveBoth()" style="width:100%;padding:10px;background:rgba(127,198,245,.15);border:1px solid #7fc6f5;color:#7fc6f5;font-weight:700;font-size:12px;border-radius:6px;cursor:pointer">💾📥 둘 다 한 번에 저장</button>
-    <div style="text-align:center;font-size:10px;color:rgba(255,255,255,.4);margin-top:8px">드래그하여 이동 · 우하단 모서리로 크기조절</div>
+    <div style="text-align:center;font-size:10px;color:rgba(255,255,255,.4)">드래그하여 이동 · 우하단 모서리로 크기조절</div>
   </div>
 </div>
 

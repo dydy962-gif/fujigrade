@@ -2404,6 +2404,17 @@ function toggleAutoMeasure(){
   var cb = document.getElementById('autoMeasureCheck');
   window._autoMeasureEnabled = cb ? cb.checked : true;
   console.log('[Auto-Measure]', window._autoMeasureEnabled ? 'ON' : 'OFF');
+  /* 패널 갱신 — "전체 측정 시작" 버튼 표시/숨김 */
+  if(typeof renderBatchResultsPanel === 'function') renderBatchResultsPanel();
+}
+
+/* ★ 2026-05-21: 패널 내부 토글 (autoMeasureCheck와 동기화) */
+function onBatchAutoToggle(checked){
+  var mainCb = document.getElementById('autoMeasureCheck');
+  if(mainCb) mainCb.checked = checked;
+  window._autoMeasureEnabled = checked;
+  console.log('[Auto-Measure] 패널 토글:', checked ? 'ON' : 'OFF');
+  if(typeof renderBatchResultsPanel === 'function') renderBatchResultsPanel();
 }
 
 /* SAM3 검출 완료 후 자동 측정 시도 (큐 콜백에서 호출됨) */
@@ -2414,16 +2425,17 @@ function tryAutoMeasure(photoObj){
   var autoOn = cb ? cb.checked : true;
   console.log('[tryAutoMeasure] 사진 idx=' + pIdx + ' / autoOn=' + autoOn + ' / detectedApples=' + (photoObj.detectedApples ? photoObj.detectedApples.length : 'null'));
   
-  if(!autoOn){
-    console.log('[tryAutoMeasure] 자동 측정 OFF — 패널 갱신 안 됨. 수동으로 측정 시작 버튼 클릭 필요');
-    /* ★ 자동 측정 OFF인 경우에도 검출 완료는 상태에 반영 */
-    return;
-  }
-  
-  /* SAM3 검출 실패한 사진 — 결과 패널에 실패로 기록 */
+  /* SAM3 검출 실패한 사진 — 결과 패널에 실패로 기록 (자동/수동 모드 공통) */
   if(!photoObj.detectedApples || photoObj.detectedApples.length === 0){
     console.warn('[tryAutoMeasure] 사진 idx=' + pIdx + ' — SAM3 검출 결과 없음, detect_failed 기록');
     addBatchResult(photoObj, null, 'detect_failed');
+    return;
+  }
+  
+  if(!autoOn){
+    /* ★ 2026-05-21: 자동 측정 OFF — 검출 완료 후 대기 상태로 변경 */
+    console.log('[tryAutoMeasure] 자동 측정 OFF — 검출 완료, 측정 대기 상태로 패널 등록');
+    addBatchResult(photoObj, null, 'detected_pending');
     return;
   }
   
@@ -2434,8 +2446,6 @@ function tryAutoMeasure(photoObj){
   
   console.log('[tryAutoMeasure] 사진 idx=' + photoIdx + ' 측정 시작 (사과 ' + photoObj.detectedApples.length + '개)');
   
-  /* ★ 2026-05-19 v4 수정: startBoxColorCorrection은 동기 측정 함수.
-     호출하면 runColorMeasurement 안에서 boxResult 만들고 addBatchResult('success') 자동 호출됨. */
   aIdx = photoIdx;
   try {
     startBoxColorCorrection();
@@ -2447,6 +2457,50 @@ function tryAutoMeasure(photoObj){
     aIdx = prevIdx;
     if(prevIdx >= 0 && prevIdx !== photoIdx) redraw();
   }
+}
+
+/* ★ 2026-05-21: 자동 측정 OFF 모드에서 대기 중인 사진들 일괄 측정 */
+function measureAllPending(){
+  if(!window._batchResults) return;
+  var pending = window._batchResults.filter(function(r){ return r.status === 'detected_pending'; });
+  if(pending.length === 0){
+    toast('⚠ 측정 대기 중인 사진이 없습니다');
+    return;
+  }
+  
+  console.log('═══ [전체 측정 시작] 대기 중 ' + pending.length + '장 일괄 측정 ═══');
+  
+  /* 진행 상황 토스트 */
+  toast('📊 ' + pending.length + '장 측정 시작 — 완료까지 약 ' + Math.ceil(pending.length * 2) + '초 소요');
+  
+  /* 1장씩 setTimeout으로 직렬 처리 (브라우저 안 멈추게) */
+  var idx = 0;
+  function processNext(){
+    if(idx >= pending.length){
+      console.log('═══ [전체 측정 완료] ═══');
+      toast('✅ 전체 측정 완료 (' + pending.length + '장)');
+      return;
+    }
+    var item = pending[idx];
+    var p = photos[item.photoIdx];
+    if(p && p.detectedApples && p.detectedApples.length > 0){
+      var prevIdx = aIdx;
+      aIdx = item.photoIdx;
+      try {
+        startBoxColorCorrection();
+        console.log('[Measure All] ' + (idx+1) + '/' + pending.length + ' 사진 idx=' + item.photoIdx + ' 완료');
+      } catch(e){
+        console.error('[Measure All] 측정 오류:', e);
+        addBatchResult(p, null, 'measure_failed');
+      } finally {
+        aIdx = prevIdx;
+      }
+    }
+    idx++;
+    /* 50ms 텀 두고 다음 — UI 멈춤 방지 */
+    setTimeout(processNext, 50);
+  }
+  processNext();
 }
 
 /* ★ 2026-05-19 추가: 사진 업로드 시 processing 상태로 미리 등록
@@ -2525,19 +2579,20 @@ function renderBatchResultsPanel(){
   
   /* 상태 카운트 */
   var success = results.filter(function(r){return r.status === 'success' && !r.saved;}).length;
-  var failed = results.filter(function(r){return r.status !== 'success' && r.status !== 'processing';}).length;
+  var failed = results.filter(function(r){return r.status === 'detect_failed' || r.status === 'measure_failed';}).length;
   var saved = results.filter(function(r){return r.saved;}).length;
   var selected = results.filter(function(r){return r.selected && !r.saved;}).length;
   var processing = results.filter(function(r){return r.status === 'processing';}).length;
+  /* ★ 2026-05-21: 측정 대기 중 (자동 측정 OFF + SAM3 검출 완료) */
+  var pending = results.filter(function(r){return r.status === 'detected_pending';}).length;
   
   /* 진행 중 사진이 있으면 펄스 효과 (시각적 강조) */
   panel.classList.toggle('processing', processing > 0);
   
   if(subtitle){
     var parts = [];
-    if(processing > 0){
-      parts.push('⏳ 분석 중 ' + processing);
-    }
+    if(processing > 0) parts.push('⏳ 분석 중 ' + processing);
+    if(pending > 0) parts.push('📋 측정 대기 ' + pending);
     if(success > 0) parts.push('✓ 완료 ' + success);
     if(failed > 0) parts.push('✗ 실패 ' + failed);
     if(saved > 0) parts.push('💾 저장 ' + saved);
@@ -2551,12 +2606,26 @@ function renderBatchResultsPanel(){
     if(processing > 0){
       titleEl.textContent = processing + '/' + results.length + ' 분석 중';
       titleEl.style.color = '#a0d7fa';
+    } else if(pending > 0){
+      titleEl.textContent = pending + '장 측정 대기 중';
+      titleEl.style.color = '#f5a623';
     } else if(success > 0 && processing === 0){
       titleEl.textContent = '측정 완료 (' + success + ')';
       titleEl.style.color = '#7fc6f5';
     } else {
       titleEl.textContent = '일괄 측정 결과';
       titleEl.style.color = '#a0d7fa';
+    }
+  }
+  
+  /* ★ "전체 측정 시작" 버튼 표시 제어 — pending > 0 일 때만 */
+  var measureAllBtn = document.getElementById('batchMeasureAllBtn');
+  if(measureAllBtn){
+    if(pending > 0){
+      measureAllBtn.style.display = '';
+      measureAllBtn.textContent = '📊 ' + pending + '장 전체 측정 시작';
+    } else {
+      measureAllBtn.style.display = 'none';
     }
   }
   
@@ -2606,6 +2675,20 @@ function renderBatchResultsPanel(){
           '<div style="font-size:10px;color:#aa64ff;font-family:var(--mm)">🎯 분석 중... · 클릭해서 진행 보기</div>' +
         '</div>' +
         '<span style="color:#aa64ff;font-size:14px;flex-shrink:0;animation:dotBlink 1.4s ease-in-out infinite">⋯</span>' +
+        '</div>';
+      continue;
+    }
+    
+    /* ★ 2026-05-21 추가: detected_pending — SAM3 검출은 됐지만 측정 대기 중 (자동 측정 OFF) */
+    if(item.status === 'detected_pending'){
+      var dpCount = (photos[item.photoIdx] && photos[item.photoIdx].detectedApples) ? photos[item.photoIdx].detectedApples.length : 0;
+      html += '<div data-batch-idx="' + origIdx + '" style="display:flex;align-items:center;gap:8px;padding:10px;background:rgba(127,198,245,.08);border:1px solid rgba(127,198,245,.35);border-radius:6px;margin-bottom:5px;cursor:pointer" onclick="openBatchItem(' + origIdx + ', event)" title="클릭하면 SAM3 검출 결과 보기">' +
+        '<div style="width:30px;height:30px;border-radius:6px;background:rgba(127,198,245,.2);border:2px solid #7fc6f5;display:flex;align-items:center;justify-content:center;color:#7fc6f5;font-weight:700;font-size:11px;flex-shrink:0">' + photoNum + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:12px;font-weight:600;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(item.photoName) + '</div>' +
+          '<div style="font-size:10px;color:#7fc6f5;font-family:var(--mm)">✓ 검출 완료 (사과 ' + dpCount + '개) · 측정 대기</div>' +
+        '</div>' +
+        '<span style="color:#7fc6f5;font-size:14px;flex-shrink:0">📋</span>' +
         '</div>';
       continue;
     }
@@ -3762,6 +3845,15 @@ function saveBoxResult(){
   var p = photos[aIdx];
   var r = p.boxResult;
   
+  /* ★ 2026-05-21 핵심 버그 수정: 중복 저장 방지
+     같은 사진을 SAM3 재측정 + 자동 측정 + 일괄 저장 같이 여러 번 거치면서
+     도별 카운트가 한 사진당 여러 번 증가하던 버그 (지도 48건 vs 실제 9건). */
+  if(p.saved){
+    console.log('[Save] 이미 저장된 사진 — 중복 저장 방지 (사진 idx=' + aIdx + ')');
+    /* 사용자에게는 알림만 — 결과 패널에서 saved 처리는 호출자가 알아서 */
+    return;
+  }
+  
   var records = loadAllRecords();
   
   /* ★ 2026-05-19 수정: 사진별 GPS 우선 사용
@@ -3825,15 +3917,8 @@ function saveBoxResult(){
   records.push(record);
   saveAllRecords(records);
   
-  /* 도별 통계 갱신 — 사진별 region 기준 */
-  if(photoRegion){
-    var regionData2 = loadRegionData();
-    if(!regionData2[photoRegion]) regionData2[photoRegion] = {name: rname, count:0, sum:0, avg:0};
-    regionData2[photoRegion].count++;
-    regionData2[photoRegion].sum += r.avgPct;
-    regionData2[photoRegion].avg = Math.round(regionData2[photoRegion].sum / regionData2[photoRegion].count * 10) / 10;
-    saveRegionData(regionData2);
-  }
+  /* ★ 2026-05-21: 도별 통계는 records 기준으로 재계산 — 중복 카운트 방지 */
+  rebuildRegionDataFromRecords();
   
   p.saved = true;
   toast('💾 박스 측정 저장됨 ('+r.count+'개 사과, 평균 '+r.avgPct+'%, '+(rname||'위치미상')+')');
@@ -5848,6 +5933,30 @@ function saveAllRecords(records){
   try{localStorage.setItem('fujigrade_records',JSON.stringify(records));}catch(e){}
 }
 
+/* ★ 2026-05-21: 데이터 무결성 재계산 — 도별 카운트를 records에서 다시 계산
+   이전 중복 저장 버그로 fujigrade_v2 카운트가 부풀려진 경우 복구용.
+   페이지 로드 시 자동 호출되어 records 기준으로 도별 통계를 다시 만듦. */
+function rebuildRegionDataFromRecords(){
+  var records = loadAllRecords();
+  var regions = {};
+  var REGION_NAMES = {
+    gyeonggi:'경기도', gangwon:'강원도', chungbuk:'충청북도', chungnam:'충청남도',
+    gyeongbuk:'경상북도', gyeongnam:'경상남도', jeonbuk:'전북', jeonnam:'전남', jeju:'제주도'
+  };
+  for(var i=0; i<records.length; i++){
+    var r = records[i];
+    if(!r.region) continue;
+    if(!regions[r.region]) regions[r.region] = {name: REGION_NAMES[r.region] || r.region, count:0, sum:0, avg:0};
+    regions[r.region].count++;
+    regions[r.region].sum += r.pct;
+    regions[r.region].avg = Math.round(regions[r.region].sum / regions[r.region].count * 10) / 10;
+  }
+  var oldData = loadRegionData();
+  saveRegionData(regions);
+  console.log('[데이터 무결성] 재계산 완료 — 이전:', JSON.stringify(oldData).substring(0,100), '→ 새:', JSON.stringify(regions).substring(0,100));
+  return regions;
+}
+
 /* ════════════════════════════════════════════════════
    평균내기 — 상부/하부 가중평균 계산 (2026-05-17 추가)
    ════════════════════════════════════════════════════
@@ -6326,8 +6435,17 @@ function renderRecordsPage(){
   if(!tabsEl||!contentEl) return;
 
   /* 전체 탭 + 도별 탭 */
+  /* ★ 2026-05-21: 지역 이름 한글 강제 매핑 - r.regionName이 비어있으면 영문 ID가 나오던 버그 */
+  var REGION_KR_TAB = {
+    gyeonggi:'경기도', gangwon:'강원도', chungbuk:'충청북도', chungnam:'충청남도',
+    gyeongbuk:'경상북도', gyeongnam:'경상남도', jeonbuk:'전북', jeonnam:'전남', jeju:'제주도'
+  };
   var usedRegions={};
-  for(var i=0;i<records.length;i++) usedRegions[records[i].region]=records[i].regionName;
+  for(var i=0;i<records.length;i++){
+    var rg = records[i].region;
+    if(!rg) continue;
+    usedRegions[rg] = REGION_KR_TAB[rg] || records[i].regionName || rg;
+  }
 
   var activeTab=window._recActiveTab||'all';
   var tabs='<button class="rec-rtab'+(activeTab==='all'?' active':'')+'" onclick="setRecTab(\'all\')">전체 ('+records.length+')</button>';
@@ -6335,7 +6453,7 @@ function renderRecordsPage(){
   for(var ri=0;ri<rkeys.length;ri++){
     var rc=rkeys[ri];
     var cnt=0;for(var i=0;i<records.length;i++){if(records[i].region===rc)cnt++;}
-    tabs+='<button class="rec-rtab'+(activeTab===rc?' active':'')+'" onclick="setRecTab(\''+rc+'\')">'+usedRegions[rc]+' ('+cnt+')</button>';
+    tabs+='<button class="rec-rtab'+(activeTab===rc?' active':'')+'" onclick="setRecTab(\''+rc+'\')">'+escapeHtml(usedRegions[rc])+' ('+cnt+')</button>';
   }
   tabsEl.innerHTML=tabs;
 
@@ -6595,9 +6713,23 @@ function renderStatsMemo(){
     if(r.pct>regStats[r.region].maxPct) regStats[r.region].maxPct=r.pct;
   }
   var regArr=[];
-  for(var k in regStats){if(regStats.hasOwnProperty(k)){var s=regStats[k];s.avg=Math.round(s.sum/s.count*10)/10;regArr.push(s);}}
+  /* ★ 2026-05-21: 지역 영문ID → 한글 강제 매핑 */
+  var REGION_KR = {
+    gyeonggi:'경기도', gangwon:'강원도', chungbuk:'충청북도', chungnam:'충청남도',
+    gyeongbuk:'경상북도', gyeongnam:'경상남도', jeonbuk:'전북', jeonnam:'전남', jeju:'제주도'
+  };
+  for(var k in regStats){
+    if(regStats.hasOwnProperty(k)){
+      var s=regStats[k];
+      s.avg=Math.round(s.sum/s.count*10)/10;
+      /* 한글 이름 강제 */
+      s.name = REGION_KR[k] || s.name || k;
+      regArr.push(s);
+    }
+  }
   regArr.sort(function(a,b){return b.avg-a.avg;}); /* 평균 높은 순 */
-  var top3=regArr.slice(0,3);
+  /* ★ 2026-05-21: TOP 3 → TOP 5 */
+  var topN = regArr.slice(0,5);
 
   /* ── 3. 등급 분포 ── */
   var gradeCnt={G1:0,G2:0,G3:0,G4:0,G5:0};
@@ -6637,17 +6769,18 @@ function renderStatsMemo(){
   html+='</div>';
   html+='</div>';
 
-  /* 도별 TOP 3 */
-  if(top3.length){
+  /* 도별 TOP 5 */
+  if(topN.length){
     html+='<div style="background:rgba(0,0,0,.18);border-radius:6px;padding:10px;margin-bottom:10px">';
-    html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🏆 착색률 TOP 3 지역</div>';
-    for(var i=0;i<top3.length;i++){
-      var t=top3[i];
+    html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🏆 착색률 TOP 5 지역</div>';
+    var medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+    for(var i=0;i<topN.length;i++){
+      var t=topN[i];
       var tCard=getCard(t.avg);
-      var medal=i===0?'🥇':i===1?'🥈':'🥉';
-      html+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:'+(i<top3.length-1?'1px solid rgba(255,255,255,.05)':'none')+'">';
+      var medal=medals[i] || '•';
+      html+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:'+(i<topN.length-1?'1px solid rgba(255,255,255,.05)':'none')+'">';
       html+='<span style="font-size:14px">'+medal+'</span>';
-      html+='<span style="flex:1;font-size:12px">'+t.name+' <span style="color:var(--muted);font-size:10px">('+t.count+'건)</span></span>';
+      html+='<span style="flex:1;font-size:12px">'+escapeHtml(t.name)+' <span style="color:var(--muted);font-size:10px">('+t.count+'건)</span></span>';
       html+='<span style="font-weight:600;color:'+tCard.color+'">'+t.avg+'%</span>';
       html+='</div>';
     }
@@ -6686,22 +6819,8 @@ function renderStatsMemo(){
     html+='</div>';
   }
 
-  /* 최근 활동 */
-  if(recent.length){
-    html+='<div style="background:rgba(0,0,0,.18);border-radius:6px;padding:10px">';
-    html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">🕒 최근 활동</div>';
-    for(var i=0;i<recent.length;i++){
-      var rc=recent[i];
-      var rcCard=getCard(rc.pct);
-      html+='<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px">';
-      html+='<span style="background:'+rc.gradeColor+';color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:600">'+rc.grade+'</span>';
-      html+='<span style="flex:1;color:var(--cream)">'+(rc.regionName||'—')+'</span>';
-      html+='<span style="color:var(--muted);font-size:10px">'+rc.date.slice(5)+'</span>';
-      html+='<span style="color:'+rcCard.color+';font-weight:600;width:50px;text-align:right">'+rc.pct+'%</span>';
-      html+='</div>';
-    }
-    html+='</div>';
-  }
+  /* ★ 2026-05-21: 최근 활동 섹션 제거 (사용자 요청) */
+
 
   memoBody.innerHTML=html;
   if(memoUpdated) memoUpdated.textContent='업데이트 '+new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
@@ -7184,11 +7303,14 @@ document.getElementById('harvestDate').value=new Date().toISOString().slice(0,10
 })();
 
 document.addEventListener('DOMContentLoaded',function(){
+  /* ★ 2026-05-21: 데이터 무결성 자동 복구 — 부풀려진 카운트 정정 */
+  if(typeof rebuildRegionDataFromRecords === 'function') rebuildRegionDataFromRecords();
   initKoreaMap();
   renderStatsMemo();
   renderRecordsPage();
   initVarietyUI();
 });
+if(typeof rebuildRegionDataFromRecords === 'function') rebuildRegionDataFromRecords();
 initKoreaMap();
 renderStatsMemo();
 renderRecordsPage();
@@ -7204,8 +7326,8 @@ initVarietyUI();
 #batchResultsPanel{
   position:fixed;
   top:80px; right:20px;
-  width:380px;
-  height:560px; /* ★ 기본 높이 추가 — 본문 스크롤 작동에 필수 */
+  width:440px; /* 380 → 440으로 키움 — toolbar 3개 버튼 안 잘리게 */
+  height:600px; /* 560 → 600 — 더 많이 보이게 */
   background:#0a0a0a;
   border:1px solid rgba(160,215,250,.4);
   border-radius:12px;
@@ -7213,9 +7335,12 @@ initVarietyUI();
   z-index:9998;
   overflow:hidden;
   backdrop-filter:blur(10px);
-  resize:both; /* 사용자가 우하단 모서리 드래그로 크기 조절 */
-  min-width:280px; min-height:200px;
-  max-width:90vw; max-height:90vh;
+  resize:both;
+  min-width:340px; min-height:300px;
+  max-width:calc(100vw - 40px); max-height:calc(100vh - 100px);
+  /* ★ flexbox 레이아웃 — 본문이 남는 공간 차지 + 자동 스크롤 */
+  display:flex;
+  flex-direction:column;
 }
 #batchResultsPanel.minimized{
   height:auto !important;
@@ -7285,11 +7410,7 @@ initVarietyUI();
 }
 .batch-ctrl-btn:hover{background:rgba(255,255,255,.12);color:white}
 
-/* ★ 2026-05-19 v5: flexbox 레이아웃으로 — 본문이 남는 공간 다 차지 + 자동 스크롤 */
-#batchResultsPanel{
-  display:flex;
-  flex-direction:column;
-}
+/* ★ 2026-05-19 v6: flexbox 자식 정의 */
 #batchResultsPanel.minimized{
   display:block; /* 미니바일 땐 flexbox 해제 */
 }
@@ -7297,11 +7418,11 @@ initVarietyUI();
 #batchResultsPanel .batch-toolbar{flex-shrink:0}
 #batchResultsPanel .batch-footer{flex-shrink:0}
 #batchResultsPanel .batch-body{
-  flex:1; /* 남는 공간 다 차지 */
-  overflow-y:auto;
+  flex:1 1 0; /* 남는 공간 다 차지 — 0 base로 확실히 */
+  overflow-y:auto !important;
   overflow-x:hidden;
   padding:10px;
-  min-height:120px; /* 최소 높이 보장 */
+  min-height:0; /* flex 자식이 줄어들 수 있도록 */
 }
 /* 스크롤바 — 검정 톤에 맞게 */
 #batchResultsPanel .batch-body::-webkit-scrollbar{width:6px}
@@ -7315,11 +7436,35 @@ initVarietyUI();
   border-bottom:1px solid rgba(160,215,250,.12);
   padding:8px 10px;
 }
+/* ★ 2026-05-21: 자동 측정 토글 영역 */
+.batch-toolbar-mode{
+  display:flex;align-items:center;gap:8px;margin-bottom:6px;
+  padding-bottom:6px;border-bottom:1px dashed rgba(160,215,250,.1);
+}
+.batch-mode-toggle{
+  display:flex;align-items:center;gap:5px;
+  font-size:11px;color:rgba(255,255,255,.85);cursor:pointer;
+  font-family:var(--fm);user-select:none;
+}
+.batch-mode-toggle input[type="checkbox"]{
+  width:14px;height:14px;cursor:pointer;accent-color:#f5a623;margin:0;
+}
+.batch-mode-toggle:hover{color:#fff}
+.batch-mode-measure{
+  flex:1;padding:5px 10px;
+  background:rgba(245,166,35,.15);
+  border:1px solid rgba(245,166,35,.45);
+  color:#f5a623;font-weight:700;font-size:11px;
+  border-radius:5px;cursor:pointer;
+  font-family:var(--fm);letter-spacing:-.2px;
+}
+.batch-mode-measure:hover{background:rgba(245,166,35,.25);filter:brightness(1.1)}
 .batch-toolbar-row1{
   display:flex;gap:5px;align-items:center;margin-bottom:6px;
 }
 .batch-toolbar-row2{
   display:flex;gap:5px;
+  width:100%; /* ★ 부모 폭 명시 — 자식이 넘어가지 않도록 */
 }
 .batch-tb-spacer{flex:1}
 .batch-tb-mini{
@@ -7332,30 +7477,31 @@ initVarietyUI();
 }
 .batch-tb-mini:hover{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25)}
 .batch-tb-action{
-  padding:9px 8px;border-radius:6px;
+  padding:9px 6px;border-radius:6px;
   font-weight:700;font-size:12px;cursor:pointer;
   font-family:var(--fm);border:none;
   white-space:nowrap;letter-spacing:-.3px;
   transition:filter .15s, transform .1s;
+  min-width:0; /* ★ flex item 축소 가능하게 */
 }
 .batch-tb-action:hover{filter:brightness(1.08)}
 .batch-tb-action:active{transform:scale(.97)}
 .batch-tb-action.primary{
-  flex:1.4;
+  flex:1.6 1 0;
   background:var(--action);color:#0a0a0a;
 }
 .batch-tb-action.secondary{
-  flex:1;
+  flex:1 1 0;
   background:rgba(160,215,250,.12);
   border:1px solid rgba(160,215,250,.4);
   color:#a0d7fa;
 }
 .batch-tb-action.tertiary{
-  flex:0 0 auto;width:48px;
+  flex:0 0 42px; /* ★ 폭 살짝 줄임 48 → 42 */
   background:rgba(127,198,245,.1);
   border:1px solid rgba(127,198,245,.35);
-  color:#7fc6f5;font-size:14px;
-  padding:9px 4px;
+  color:#7fc6f5;font-size:13px;
+  padding:9px 0; /* 패딩 0 */
 }
 /* 미니바 상태에서는 툴바 숨김 */
 #batchResultsPanel.minimized .batch-toolbar{display:none}
@@ -7459,8 +7605,16 @@ initVarietyUI();
       <button class="batch-ctrl-btn" onclick="event.stopPropagation();closeBatchResultsPanel()" title="닫기">×</button>
     </div>
   </div>
-  <!-- ★ 상단 툴바 — 저장/체크 버튼들 -->
+  <!-- ★ 상단 툴바 — 저장/체크 버튼들 + 자동 측정 토글 + 전체 측정 시작 -->
   <div class="batch-toolbar">
+    <!-- ★ 2026-05-21: 자동 측정 토글 + 전체 측정 시작 (OFF 모드용) -->
+    <div class="batch-toolbar-mode" id="batchModeRow">
+      <label class="batch-mode-toggle" title="ON: SAM3 검출 후 자동 측정 / OFF: 검출만 하고 대기 (수동 측정)">
+        <input type="checkbox" id="batchAutoMeasureToggle" checked onchange="onBatchAutoToggle(this.checked)">
+        <span>⚡ 자동 측정</span>
+      </label>
+      <button id="batchMeasureAllBtn" onclick="measureAllPending()" class="batch-mode-measure" style="display:none">📊 전체 측정 시작</button>
+    </div>
     <div class="batch-toolbar-row1">
       <button class="batch-tb-mini" onclick="batchSelectAll()" title="전체 선택">☑ 전체</button>
       <button class="batch-tb-mini" onclick="batchSelectNone()" title="해제">☐ 해제</button>

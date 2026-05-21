@@ -1255,8 +1255,11 @@ function hideKreiSplash(){
         </div>
       </div>
 
-      <!-- 계산 버튼 -->
-      <button onclick="calculateWeightedAverage()" style="width:100%;padding:12px;background:var(--action);color:#0a0a0a;border:none;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer">📊 평균 계산</button>
+      <!-- 계산 버튼 + 초기화 버튼 (사용자 요청 2026-05-21) -->
+      <div style="display:flex;gap:8px">
+        <button onclick="calculateWeightedAverage()" style="flex:1;padding:12px;background:var(--action);color:#0a0a0a;border:none;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer">📊 평균 계산</button>
+        <button onclick="resetWeightedAverage()" style="flex:0 0 110px;padding:12px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.2);border-radius:6px;font-weight:600;font-size:12px;cursor:pointer">🗑 초기화</button>
+      </div>
 
       <!-- 결과 표시 영역 -->
       <div id="avgResultPanel" style="margin-top:14px;display:none"></div>
@@ -3267,7 +3270,7 @@ function setBoxStatus(status, count){
     case 'detected':
       html = '<div style="padding:10px;background:rgba(127,198,245,.1);border-radius:6px;border-left:3px solid var(--accent)">' +
         '<div style="font-weight:600;color:var(--accent);margin-bottom:4px">✅ 검출 완료 — 사과 ' + count + '개</div>' +
-        '<div style="font-size:11px;color:var(--cream);line-height:1.6">📌 픽셀 단위로 정확히 검출됨. 캔버스의 <b style="color:#4078ff">남색 영역</b>이 검출된 사과입니다. 검토 후 색 보정 + 측정 시작.</div>' +
+        '<div style="font-size:11px;color:var(--cream);line-height:1.6">📌 픽셀 단위로 정확히 검출됨. 캔버스의 <b style="color:#c8c8c8">회색 외곽선</b>이 검출된 사과입니다. 검토 후 색 보정 + 측정 시작.</div>' +
         '</div>';
       break;
     case 'keyMissing':
@@ -4378,29 +4381,25 @@ function redraw(){
     for(var i=0; i<p.detectedApples.length; i++){
       var a=p.detectedApples[i];
       if(a.polygon && a.polygon.length >= 3){
-        /* 폴리곤 외곽선 + 반투명 채우기 */
+        /* ★ 2026-05-21 v12: 채우기 제거, 회색 외곽선만 (사과 자체 색 보존) */
         ctx.beginPath();
         ctx.moveTo(a.polygon[0][0] * w, a.polygon[0][1] * h);
         for(var pi=1; pi<a.polygon.length; pi++){
           ctx.lineTo(a.polygon[pi][0] * w, a.polygon[pi][1] * h);
         }
         ctx.closePath();
-        /* ★ 2026-05-21 v11: 빨간색 → 진한 남색 (빨간 사과 위에서 더 잘 보임) */
-        ctx.fillStyle='rgba(33, 64, 175, 0.35)';
-        ctx.fill();
-        ctx.strokeStyle='rgba(64, 120, 255, 0.95)';
-        ctx.lineWidth=2;
+        /* 외곽선만 — 중성 회색, 두께 살짝 굵게 */
+        ctx.strokeStyle='rgba(200, 200, 200, 0.95)';
+        ctx.lineWidth=2.5;
         ctx.stroke();
       } else {
-        /* 폴리곤 없으면 원으로 표시 (백업) */
+        /* 폴리곤 없으면 원으로 표시 (백업) - 외곽선만 */
         var cx_ = a.x * w, cy_ = a.y * h;
         var r_ = (a.r || 0.05) * Math.min(w, h);
         ctx.beginPath();
         ctx.arc(cx_, cy_, r_, 0, 2*Math.PI);
-        ctx.fillStyle='rgba(33, 64, 175, 0.25)';
-        ctx.fill();
-        ctx.strokeStyle='rgba(64, 120, 255, 0.9)';
-        ctx.lineWidth=2;
+        ctx.strokeStyle='rgba(200, 200, 200, 0.9)';
+        ctx.lineWidth=2.5;
         ctx.stroke();
       }
     }
@@ -6297,6 +6296,30 @@ function updateAvgWeight(){
   var botEl = document.getElementById('avgBottomVal');
   if(topEl) topEl.textContent = topW;
   if(botEl) botEl.textContent = botW;
+}
+
+/* ★ 2026-05-21: 평균 계산 결과 초기화 — 다른 평균을 새로 구하기 위해 */
+function resetWeightedAverage(){
+  /* 결과 패널 숨김 */
+  var resultEl = document.getElementById('avgResultPanel');
+  if(resultEl){
+    resultEl.style.display = 'none';
+    resultEl.innerHTML = '';
+  }
+  /* 입력값도 기본값으로 리셋 */
+  var fromEl = document.getElementById('avgFromDate');
+  var toEl = document.getElementById('avgToDate');
+  if(fromEl) fromEl.value = '';
+  if(toEl) toEl.value = '';
+  var topCb = document.getElementById('avgIncludeTop');
+  var botCb = document.getElementById('avgIncludeBottom');
+  if(topCb) topCb.checked = true;
+  if(botCb) botCb.checked = true;
+  var slider = document.getElementById('avgWeightSlider');
+  if(slider) slider.value = 60;
+  /* 슬라이더 라벨도 갱신 */
+  if(typeof updateAvgWeight === 'function') updateAvgWeight();
+  toast('🗑 평균 계산 초기화 완료');
 }
 
 /* 평균 계산 — 메인 함수 */

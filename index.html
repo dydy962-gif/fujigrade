@@ -792,6 +792,7 @@ function hideKreiSplash(){
     <button class="nav-tab" onclick="showPage('refs',this)">참고 자료</button>
   </div>
   <div class="nav-right">
+    <button onclick="reopenBatchPanel()" style="background:transparent;border:1px solid rgba(127,198,245,.2);color:var(--accent);padding:5px 10px;border-radius:4px;font-size:11px;cursor:pointer" title="일괄 결과 패널 열기" id="navBatchBtn">📋 결과 패널</button>
     <button onclick="showAISettings()" style="background:transparent;border:1px solid rgba(127,198,245,.2);color:var(--accent);padding:5px 10px;border-radius:4px;font-size:11px;cursor:pointer" title="AI API 키 설정">🔑 AI</button>
     <span class="nav-spec">v22 · NIAS</span>
   </div>
@@ -967,10 +968,12 @@ function hideKreiSplash(){
       <div id="boxReviewBar" style="display:none;flex-direction:column;gap:8px;margin:8px 0;padding:10px;background:rgba(0,86,102,.1);border:1px solid rgba(0,132,134,.3);border-radius:var(--r)">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:600;color:#a0d7fa;margin-right:4px">📝 검토:</span>
-          <button class="tb" id="boxReviewBtn_delete" onclick="setBoxReviewMode('delete')">🗑 잘못 검출 삭제</button>
+          <button class="tb" id="boxReviewBtn_add" onclick="setBoxReviewMode('add')" title="빈 공간 클릭으로 놓친 사과 추가">⊕ 사과 추가</button>
+          <button class="tb" id="boxReviewBtn_delete" onclick="setBoxReviewMode('delete')" title="잘못 검출된 사과를 개별 삭제">🗑 개별 삭제</button>
+          <button class="tb" id="boxReviewBtn_move" onclick="setBoxReviewMode('move')" title="드래그로 위치/크기 조정">↔ 위치/크기 조정</button>
           <button class="tb" onclick="rerunBoxDetection()" style="margin-left:auto;font-size:11px">🔄 다시 검출</button>
         </div>
-        <div id="boxReviewTip" style="font-size:11px;color:var(--muted);line-height:1.5">💡 사과 번호를 클릭하면 잘못 검출된 영역을 삭제할 수 있습니다. AI가 자동으로 픽셀 단위 검출했으니 정확도가 높습니다.</div>
+        <div id="boxReviewTip" style="font-size:11px;color:var(--muted);line-height:1.5">💡 사과 번호를 클릭하면 잘못 검출된 영역을 삭제할 수 있습니다.</div>
         <button onclick="startBoxColorCorrection()" style="padding:10px;background:var(--action);color:#0a0a0a;border:none;border-radius:var(--r);font-weight:700;cursor:pointer;font-size:13px;font-family:var(--fm)">🔬 측정 시작 (LAB a* 분석) →</button>
       </div>
 
@@ -980,9 +983,8 @@ function hideKreiSplash(){
         <div class="mark-tip">💡 <span id="markTipText">상부 부위를 클릭 또는 드래그하세요. 클릭 시 자동 원형 ROI 생성.</span></div>
         <div class="toolbar">
           <button class="tb mark-on" id="bMark" onclick="setMode('mark')">🔴 상부 마킹</button>
-          <button class="tb" id="bCard" onclick="setMode('card')">🎯 카드 영역</button>
-          <button class="tb" onclick="undoMark()">↩</button>
-          <button class="tb" onclick="clearMarks()">🗑</button>
+          <button class="tb" onclick="undoMark()" title="마지막 추가/삭제 취소">↩ 되돌리기</button>
+          <button class="tb" onclick="if(confirm('모든 마킹을 지우시겠습니까?')) clearMarks()" title="전체 삭제">🗑 전체삭제</button>
           <button class="tb run" id="runBtn" onclick="runAnalysis()" disabled>▶ 판정</button>
         </div>
         <div class="apple-list" id="appleList"></div>
@@ -2620,12 +2622,15 @@ function renderBatchResultsPanel(){
   
   /* ★ "전체 측정 시작" 버튼 표시 제어 — pending > 0 일 때만 */
   var measureAllBtn = document.getElementById('batchMeasureAllBtn');
-  if(measureAllBtn){
+  var modeRow = document.getElementById('batchModeRow');
+  if(measureAllBtn && modeRow){
     if(pending > 0){
       measureAllBtn.style.display = '';
       measureAllBtn.textContent = '📊 ' + pending + '장 전체 측정 시작';
+      modeRow.style.display = ''; /* 행 전체 표시 */
     } else {
       measureAllBtn.style.display = 'none';
+      modeRow.style.display = 'none'; /* 행 자체 숨김 (사용자 요청: 자동측정 토글 우측 패널 제거) */
     }
   }
   
@@ -2807,6 +2812,23 @@ function openBatchItem(idx, ev){
 function closeBatchResultsPanel(){
   var panel = document.getElementById('batchResultsPanel');
   if(panel) panel.style.display = 'none';
+}
+
+/* ★ 2026-05-21: 네비에서 패널 다시 열기 */
+function reopenBatchPanel(){
+  var panel = document.getElementById('batchResultsPanel');
+  if(!panel) return;
+  if(!window._batchResults || window._batchResults.length === 0){
+    toast('⚠ 측정 결과가 없습니다. 사진을 업로드해서 측정하세요.');
+    return;
+  }
+  panel.style.display = 'block';
+  /* 미니바 상태로 시작 (사용자 거슬리지 않게) */
+  panel.classList.add('minimized');
+  var minBtn = document.getElementById('batchMinBtn');
+  if(minBtn) minBtn.textContent = '□';
+  renderBatchResultsPanel();
+  toast('📋 결과 패널 열림 — 클릭하면 펼침');
 }
 
 /* 선택한 항목 일괄 저장 */
@@ -3311,6 +3333,8 @@ function handleBoxCanvasClick(e){
       p.detectedApples.splice(hitIdx, 1);
       drawDetectedApples(p);
       toast('🗑 사과 #'+(hitIdx+1)+' 삭제됨 (남은 '+p.detectedApples.length+'개)');
+      /* ★ 2026-05-21: 측정 결과 무효화 — 다시 측정 필요 */
+      invalidateMeasurementAfterEdit(p);
     }
     return true;
   }
@@ -3325,9 +3349,11 @@ function handleBoxCanvasClick(e){
         for(var i=0; i<p.detectedApples.length; i++) sumR += p.detectedApples[i].r;
         avgR = sumR / p.detectedApples.length;
       }
-      p.detectedApples.push({x: nx, y: ny, r: avgR});
+      p.detectedApples.push({x: nx, y: ny, r: avgR, isManual: true});
       drawDetectedApples(p);
-      toast('➕ 사과 추가 (총 '+p.detectedApples.length+'개)');
+      toast('⊕ 사과 추가 (총 '+p.detectedApples.length+'개) — 드래그로 위치/크기 조정 가능');
+      /* ★ 2026-05-21: 측정 결과 무효화 */
+      invalidateMeasurementAfterEdit(p);
     } else {
       toast('이미 사과가 있는 위치입니다. 삭제 모드로 변경하세요.');
     }
@@ -3336,6 +3362,25 @@ function handleBoxCanvasClick(e){
   
   /* move 모드는 mousedown/move/up에서 처리됨 */
   return false;
+}
+
+/* ★ 2026-05-21: 검토 모드에서 사과 편집 시 측정 결과 무효화 + 패널 상태 갱신 */
+function invalidateMeasurementAfterEdit(p){
+  if(p.boxResult){
+    p.boxResult = null;
+    var pIdx = photos.indexOf(p);
+    /* 패널 상태도 measurement_pending으로 되돌림 */
+    if(window._batchResults){
+      var existing = window._batchResults.find(function(r){ return r.photoIdx === pIdx; });
+      if(existing){
+        existing.status = 'detected_pending';
+        existing.result = null;
+        existing.saved = false;
+        renderBatchResultsPanel();
+      }
+    }
+    p.saved = false; /* 다시 저장 가능 상태로 */
+  }
 }
 
 /* 캔버스 마우스다운 (move 모드용) */
@@ -3845,6 +3890,9 @@ function saveBoxResult(){
   var p = photos[aIdx];
   var r = p.boxResult;
   
+  /* ★ 2026-05-21 진단 로그: 호출 추적 */
+  console.log('[saveBoxResult] 진입 — 사진 idx=' + aIdx + ', already saved=' + (p.saved ? 'YES' : 'no'));
+  
   /* ★ 2026-05-21 핵심 버그 수정: 중복 저장 방지
      같은 사진을 SAM3 재측정 + 자동 측정 + 일괄 저장 같이 여러 번 거치면서
      도별 카운트가 한 사진당 여러 번 증가하던 버그 (지도 48건 vs 실제 9건). */
@@ -3913,6 +3961,30 @@ function saveBoxResult(){
     /* ★ 2026-05-17 추가: 상부/하부 구분 (평균내기용) */
     photoMode: p.mode || 'top'
   };
+  
+  /* ★ 2026-05-21: 박스 모드도 2주 날씨 정보 저장 (기록 탭 표시용) */
+  if(typeof weatherCache !== 'undefined' && weatherCache){
+    var maxArrB=[],minArrB=[],allArrB=[],totRainB=0,sunTotalB=0,sunCntB=0;
+    for(var wi=0;wi<weatherCache.time.length;wi++){
+      var precB=weatherCache.precipitation_sum[wi]||0;
+      var tmaxB=weatherCache.temperature_2m_max[wi];
+      var tminB=weatherCache.temperature_2m_min[wi];
+      var sunB=weatherCache.sunshine_duration?weatherCache.sunshine_duration[wi]:null;
+      if(sunB!==null&&sunB!==undefined){sunTotalB+=sunB;sunCntB++;}
+      totRainB+=precB;
+      if(tmaxB!==null) maxArrB.push(tmaxB);
+      if(tminB!==null) minArrB.push(tminB);
+      if(tmaxB!==null&&tminB!==null) allArrB.push((tmaxB+tminB)/2);
+    }
+    record.weather={
+      avgMax:maxArrB.length?Math.round(maxArrB.reduce(function(a,b){return a+b;},0)/maxArrB.length*10)/10:null,
+      avgMin:minArrB.length?Math.round(minArrB.reduce(function(a,b){return a+b;},0)/minArrB.length*10)/10:null,
+      avgAll:allArrB.length?Math.round(allArrB.reduce(function(a,b){return a+b;},0)/allArrB.length*10)/10:null,
+      totalRain:Math.round(totRainB*10)/10,
+      sunHours:sunCntB>0?Math.round((sunTotalB/sunCntB/3600)*10)/10:0,
+      sunHoursTotal:sunCntB>0?Math.round((sunTotalB/3600)*10)/10:0
+    };
+  }
   
   records.push(record);
   saveAllRecords(records);
@@ -4448,6 +4520,13 @@ function checkRun(){
 function undoMark(){
   if(aIdx<0) return;
   var p=photos[aIdx];
+  /* ★ 2026-05-21: 박스 모드 (SAM3 검출) 지원 추가 */
+  if(p.detectedApples && p.detectedApples.length > 0){
+    p.detectedApples.pop();
+    redraw();
+    toast('마지막 사과 제거 (남은 ' + p.detectedApples.length + '개)');
+    return;
+  }
   if(mode==='mark'&&p.apples.length){p.apples.pop();renderApples();checkRun();}
   else{var k=Object.keys(p.cardRs);if(k.length)delete p.cardRs[k[k.length-1]];}
   redraw();
@@ -4455,10 +4534,143 @@ function undoMark(){
 function clearMarks(){
   if(aIdx<0) return;
   var p=photos[aIdx];
+  /* ★ 2026-05-21: 박스 모드도 같이 초기화 */
+  p.detectedApples = null;
   p.apples=[];p.cardRs={};p.res=null;
+  /* 삭제 모드도 끔 */
+  window._deleteMode = false;
+  updateDeleteModeUI();
   renderApples();checkRun();redraw();
   document.getElementById('emptyState').style.display='flex';
   document.getElementById('resultPanel').style.display='none';
+  toast('모든 마킹 제거됨');
+}
+
+/* ★ 2026-05-21 추가: 개별 삭제 모드 — 쓰레기통 길게 누르거나 한 번 더 누르면 모드 토글 */
+function toggleDeleteMode(){
+  if(aIdx<0) return;
+  var p=photos[aIdx];
+  if(!p.detectedApples || p.detectedApples.length === 0){
+    toast('⚠ 삭제할 사과가 없습니다');
+    return;
+  }
+  window._deleteMode = !window._deleteMode;
+  updateDeleteModeUI();
+  if(window._deleteMode){
+    toast('🗑 삭제 모드 — 사과 번호 클릭하면 개별 삭제됩니다');
+  } else {
+    toast('삭제 모드 종료');
+  }
+  redraw();
+}
+
+function updateDeleteModeUI(){
+  var btn = document.getElementById('bDelMode');
+  if(btn){
+    if(window._deleteMode){
+      btn.classList.add('mark-on');
+      btn.style.background = '#e74c3c';
+      btn.style.color = '#fff';
+    } else {
+      btn.classList.remove('mark-on');
+      btn.style.background = '';
+      btn.style.color = '';
+    }
+  }
+}
+
+/* ★ 2026-05-21: 클릭한 사과 1개 삭제 (삭제 모드일 때 사용) */
+function deleteApple(appleIdx){
+  if(aIdx<0) return;
+  var p=photos[aIdx];
+  if(!p.detectedApples || appleIdx < 0 || appleIdx >= p.detectedApples.length) return;
+  var removed = p.detectedApples.splice(appleIdx, 1);
+  toast('🗑 사과 #' + (appleIdx+1) + ' 삭제 — 남은 ' + p.detectedApples.length + '개');
+  /* 측정 결과도 재계산 필요 — boxResult 무효화 */
+  if(p.boxResult){
+    p.boxResult = null;
+    /* 패널 상태도 갱신 */
+    if(window._batchResults){
+      var existing = window._batchResults.find(function(r){ return r.photoIdx === aIdx; });
+      if(existing && existing.status === 'success'){
+        existing.status = 'detected_pending'; /* 다시 측정 대기 상태로 */
+        existing.result = null;
+        existing.saved = false;
+        renderBatchResultsPanel();
+      }
+    }
+  }
+  redraw();
+}
+
+/* ★ 2026-05-21: 수동 원 추가 모드 — 클릭한 위치에 평균 사과 크기의 원 추가 */
+function toggleAddCircleMode(){
+  if(aIdx<0) return;
+  var p=photos[aIdx];
+  if(!p.detectedApples) p.detectedApples = [];
+  window._addCircleMode = !window._addCircleMode;
+  /* 삭제 모드와 동시 사용 금지 */
+  if(window._addCircleMode) window._deleteMode = false;
+  updateDeleteModeUI();
+  updateAddCircleUI();
+  if(window._addCircleMode){
+    toast('⊕ 사과 추가 모드 — 사진의 사과 위치를 클릭하세요');
+  } else {
+    toast('사과 추가 모드 종료');
+  }
+}
+
+function updateAddCircleUI(){
+  var btn = document.getElementById('bAddCircle');
+  if(btn){
+    if(window._addCircleMode){
+      btn.style.background = '#7fc6f5';
+      btn.style.color = '#04101c';
+    } else {
+      btn.style.background = '';
+      btn.style.color = '';
+    }
+  }
+}
+
+/* 사진에 사과 원 1개 추가 (사용자 클릭) */
+function addAppleAt(x, y){
+  if(aIdx<0) return;
+  var p=photos[aIdx];
+  if(!p.detectedApples) p.detectedApples = [];
+  /* 평균 사과 크기 — 기존 검출된 사과들의 평균 반지름 (없으면 기본값) */
+  var avgR = 50;
+  if(p.detectedApples.length > 0){
+    var sumR = 0, n = 0;
+    for(var i=0;i<p.detectedApples.length;i++){
+      var a = p.detectedApples[i];
+      if(a.radius){ sumR += a.radius; n++; }
+      else if(a.bbox){ sumR += Math.max(a.bbox.w, a.bbox.h)/2; n++; }
+    }
+    if(n > 0) avgR = sumR / n;
+  }
+  /* 새 사과 객체 추가 — 원 형태 (polygon 대신 center/radius) */
+  p.detectedApples.push({
+    center: {x:x, y:y},
+    radius: avgR,
+    bbox: {x:x-avgR, y:y-avgR, w:avgR*2, h:avgR*2},
+    isManual: true /* 수동 추가 표시 */
+  });
+  toast('⊕ 사과 추가 (총 ' + p.detectedApples.length + '개) — 드래그로 위치/크기 조정 가능');
+  /* boxResult 무효화 — 재측정 필요 */
+  if(p.boxResult){
+    p.boxResult = null;
+    if(window._batchResults){
+      var existing = window._batchResults.find(function(r){ return r.photoIdx === aIdx; });
+      if(existing && existing.status === 'success'){
+        existing.status = 'detected_pending';
+        existing.result = null;
+        existing.saved = false;
+        renderBatchResultsPanel();
+      }
+    }
+  }
+  redraw();
 }
 
 /* ── 판정 실행 ── */
@@ -7605,15 +7817,12 @@ initVarietyUI();
       <button class="batch-ctrl-btn" onclick="event.stopPropagation();closeBatchResultsPanel()" title="닫기">×</button>
     </div>
   </div>
-  <!-- ★ 상단 툴바 — 저장/체크 버튼들 + 자동 측정 토글 + 전체 측정 시작 -->
+  <!-- ★ 상단 툴바 — 저장/체크 버튼들 + 전체 측정 시작 버튼 (자동 측정 OFF 모드용) -->
   <div class="batch-toolbar">
-    <!-- ★ 2026-05-21: 자동 측정 토글 + 전체 측정 시작 (OFF 모드용) -->
-    <div class="batch-toolbar-mode" id="batchModeRow">
-      <label class="batch-mode-toggle" title="ON: SAM3 검출 후 자동 측정 / OFF: 검출만 하고 대기 (수동 측정)">
-        <input type="checkbox" id="batchAutoMeasureToggle" checked onchange="onBatchAutoToggle(this.checked)">
-        <span>⚡ 자동 측정</span>
-      </label>
-      <button id="batchMeasureAllBtn" onclick="measureAllPending()" class="batch-mode-measure" style="display:none">📊 전체 측정 시작</button>
+    <!-- ★ 2026-05-21: 자동 측정 토글은 사진 업로드란으로 통일 — 우측 패널 토글 제거
+         '전체 측정 시작' 버튼만 남김 (자동 측정 OFF + pending 사진 있을 때만 표시) -->
+    <div class="batch-toolbar-mode" id="batchModeRow" style="display:none">
+      <button id="batchMeasureAllBtn" onclick="measureAllPending()" class="batch-mode-measure">📊 전체 측정 시작</button>
     </div>
     <div class="batch-toolbar-row1">
       <button class="batch-tb-mini" onclick="batchSelectAll()" title="전체 선택">☑ 전체</button>
@@ -7623,8 +7832,8 @@ initVarietyUI();
     <div class="batch-toolbar-row2">
       <button id="batchSaveBtn" onclick="confirmLocationsBeforeSave()" class="batch-tb-action primary">💾 데이터 저장</button>
       <button id="batchSaveImgBtn" onclick="batchSaveImages()" class="batch-tb-action secondary">📥 이미지</button>
-      <button id="batchSaveBothBtn" onclick="batchSaveBoth()" class="batch-tb-action tertiary" title="데이터 + 이미지 한번에">💾📥</button>
     </div>
+    <!-- ★ 2026-05-21: "둘 다 저장" 버튼 제거 - 패널 너비 넘어가는 잘림 문제 해결 + UX 단순화 -->
   </div>
   <div class="batch-body">
     <div id="batchResultsList"></div>

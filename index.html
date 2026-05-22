@@ -1086,13 +1086,18 @@ function hideKreiSplash(){
             <div class="nat-num" id="natAvgNum">—<span style="font-size:14px;opacity:.5">%</span></div>
             <div class="nat-lbl">전국 평균 착색률</div>
           </div>
-          <!-- 2026-05-22 v14.4: 시·군 TOP 10 -->
-          <div id="topCitiesBox" style="background:rgba(13,13,16,0.4);border:1px solid rgba(127,198,245,0.18);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:none">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <span style="font-family:var(--fm);font-size:12px;font-weight:700;color:var(--cream);letter-spacing:0.5px">🏆 시·군 착색률 TOP 10</span>
-              <span id="topCitiesSubLbl" style="font-family:var(--mm);font-size:9px;color:var(--muted)">n≥5 기준</span>
+          <!-- ★ 2026-05-22 v14.6: sticky 박스 그룹 - 스크롤 시 따라옴 -->
+          <div id="stickyInfoGroup" style="position:sticky;top:8px;z-index:5;margin-bottom:8px">
+            <!-- 시·군 TOP 10 -->
+            <div id="topCitiesBox" style="background:rgba(13,13,16,0.92);border:1px solid rgba(127,198,245,0.25);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:none;backdrop-filter:blur(8px);box-shadow:0 4px 12px rgba(0,0,0,0.4)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <span style="font-family:var(--fm);font-size:12px;font-weight:700;color:var(--cream);letter-spacing:0.5px">🏆 시·군 착색률 TOP 10</span>
+                <span id="topCitiesSubLbl" style="font-family:var(--mm);font-size:9px;color:var(--muted)">n≥5 기준</span>
+              </div>
+              <div id="topCitiesList" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-family:var(--fm);font-size:11px"></div>
             </div>
-            <div id="topCitiesList" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-family:var(--fm);font-size:11px"></div>
+            <!-- 시 클릭 시 상세 카드 (시·군 선택 박스) -->
+            <div id="sigunguDetailCard" style="background:rgba(13,13,16,0.92);border:1px solid rgba(127,198,245,0.4);border-radius:var(--r);padding:14px 16px;margin-bottom:8px;display:none;backdrop-filter:blur(8px);box-shadow:0 4px 12px rgba(0,0,0,0.4)"></div>
           </div>
           <div id="svgMapWrap" style="background:#0d0d10;border-radius:var(--r);overflow:hidden;margin-bottom:8px;border:1px solid rgba(127,198,245,.3);padding:6px;position:relative">
             <!-- 2026-05-22 줌 복귀 버튼 (줌인 상태에서만 보임) -->
@@ -7352,9 +7357,11 @@ function resetMapZoom(){
     }
   }
   
-  /* ★ v14.5: 시·군 상세 패널 숨김 */
+  /* ★ v14.6: 시·군 상세 카드 숨김 (구 패널 + 새 카드 둘 다) */
   var sigDetail = document.getElementById('sigunguDetailPanel');
   if(sigDetail) sigDetail.style.display = 'none';
+  var sigCard = document.getElementById('sigunguDetailCard');
+  if(sigCard) sigCard.style.display = 'none';
   
   zoomedRegion = null;
   
@@ -7496,7 +7503,16 @@ function renderSigunguBorders(regionId){
 }
 
 /* ★ 2026-05-22 v14.5: 시·군 클릭 시 상세 패널 표시 */
+/* ★ 2026-05-22 v14.6: 시·군 클릭 시 상단 sticky 카드에 큰 정보 표시
+   변경: 좌하단 작은 패널 → 지도 위 sticky 박스에 풍성한 정보
+   - 평균 착색률 (큰 숫자)
+   - 표본 수, 신뢰도
+   - 등급 분포 (G1~G5 비율)
+   - 최근 측정일 */
 function clickSigungu(cityName){
+  var card = document.getElementById('sigunguDetailCard');
+  if(!card) return;
+  
   var records = (typeof loadAllRecords === 'function') ? loadAllRecords() : [];
   var matched = [];
   for(var i=0;i<records.length;i++){
@@ -7506,45 +7522,74 @@ function clickSigungu(cityName){
     }
   }
   
-  var panel = document.getElementById('sigunguDetailPanel');
-  if(!panel){
-    /* 패널이 없으면 동적 생성 */
-    panel = document.createElement('div');
-    panel.id = 'sigunguDetailPanel';
-    panel.style.cssText = 'position:absolute;left:14px;bottom:14px;z-index:11;padding:10px 14px;background:rgba(13,13,16,0.92);border:1px solid rgba(127,198,245,0.4);color:#f0ead6;border-radius:8px;font-family:var(--fm);backdrop-filter:blur(4px);min-width:180px;max-width:260px;font-size:12px';
-    var svgWrap = document.getElementById('svgMapWrap');
-    if(svgWrap) svgWrap.appendChild(panel);
-  }
-  
   var html = '';
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
-  html += '<span style="font-weight:700;font-size:13px;color:var(--cream)">'+cityName+'</span>';
-  html += '<span onclick="document.getElementById(\'sigunguDetailPanel\').style.display=\'none\'" style="cursor:pointer;color:var(--muted);font-size:14px;padding:0 4px">×</span>';
+  /* 헤더: 도시 이름 + 닫기 버튼 */
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  html += '<span style="font-weight:700;font-size:15px;color:var(--cream);letter-spacing:0.3px">📍 '+cityName+'</span>';
+  html += '<span onclick="document.getElementById(\'sigunguDetailCard\').style.display=\'none\'" style="cursor:pointer;color:var(--muted);font-size:18px;padding:0 6px;line-height:1">×</span>';
   html += '</div>';
   
   if(matched.length === 0){
-    html += '<div style="color:var(--muted);font-size:11px">아직 데이터가 없습니다</div>';
+    html += '<div style="text-align:center;padding:14px 0;color:var(--muted);font-size:12px">아직 측정 데이터가 없습니다</div>';
+    html += '<div style="text-align:center;font-size:10px;color:var(--muted);opacity:0.7">이 시·군에서 측정한 사진을 저장하면 여기에 표시됩니다</div>';
   } else {
+    /* 평균 + 표본 수 계산 */
     var sum = 0;
     for(var m=0;m<matched.length;m++) sum += (matched[m].avg || 0);
     var avg = sum / matched.length;
-    var card = (typeof getCard === 'function') ? getCard(avg) : {color:'#9d9d77', label:''};
+    var cardObj = (typeof getCard === 'function') ? getCard(avg) : {color:'#9d9d77', label:'-'};
     var trust = matched.length >= 5 ? '신뢰' : '참고용';
-    var trustCol = matched.length >= 5 ? card.color : 'var(--muted)';
+    var trustCol = matched.length >= 5 ? cardObj.color : 'var(--muted)';
     
-    html += '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">';
-    html += '<span style="font-size:24px;font-weight:800;color:'+card.color+'">'+avg.toFixed(1)+'%</span>';
-    html += '<span style="font-size:11px;color:var(--muted)">평균 착색률</span>';
-    html += '</div>';
+    /* 메인: 평균 착색률 큰 숫자 */
+    html += '<div style="display:flex;align-items:flex-end;gap:10px;margin-bottom:10px">';
+    html += '<span style="font-size:36px;font-weight:800;color:'+cardObj.color+';line-height:1">'+avg.toFixed(1)+'%</span>';
+    html += '<div style="padding-bottom:6px">';
+    html += '<div style="font-size:11px;color:var(--muted)">평균 착색률</div>';
+    html += '<div style="font-size:11px;color:'+cardObj.color+';font-weight:600">'+(cardObj.label||'')+'</div>';
+    html += '</div></div>';
     
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding-top:4px;border-top:1px solid rgba(127,198,245,0.18)">';
-    html += '<span>표본: <b style="color:var(--cream)">'+matched.length+'장</b></span>';
-    html += '<span style="color:'+trustCol+'">'+trust+'</span>';
+    /* 등급 분포 G1~G5 */
+    var gradeCnt = {G1:0, G2:0, G3:0, G4:0, G5:0};
+    for(var g=0;g<matched.length;g++){
+      var gAvg = matched[g].avg || 0;
+      var gCard = (typeof getCard === 'function') ? getCard(gAvg) : null;
+      if(gCard && gCard.label){
+        var gKey = gCard.label.split(' ')[0]; /* "G3 (양호)" → "G3" */
+        if(gradeCnt[gKey] !== undefined) gradeCnt[gKey] += 1;
+      }
+    }
+    
+    /* 등급 분포 바 차트 */
+    var GRADE_COLORS = {G1:'#b25357', G2:'#b26661', G3:'#af7969', G4:'#a68c70', G5:'#9d9d77'};
+    html += '<div style="margin-bottom:10px">';
+    html += '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">등급 분포</div>';
+    html += '<div style="display:flex;height:18px;border-radius:3px;overflow:hidden;background:rgba(127,198,245,0.08)">';
+    var hasGrade = false;
+    for(var gk in gradeCnt){
+      if(gradeCnt[gk] > 0){
+        hasGrade = true;
+        var pct = (gradeCnt[gk] / matched.length * 100).toFixed(0);
+        html += '<div title="'+gk+': '+gradeCnt[gk]+'장" style="flex:'+gradeCnt[gk]+';background:'+GRADE_COLORS[gk]+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#0d0d10;min-width:18px">'+gk+'</div>';
+      }
+    }
+    if(!hasGrade){
+      html += '<div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">분류 없음</div>';
+    }
+    html += '</div></div>';
+    
+    /* 하단: 표본 수 + 신뢰도 */
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding-top:8px;border-top:1px solid rgba(127,198,245,0.18)">';
+    html += '<span>📊 표본 <b style="color:var(--cream)">'+matched.length+'장</b></span>';
+    html += '<span style="color:'+trustCol+';font-weight:600">'+trust+' (n='+matched.length+')</span>';
     html += '</div>';
   }
   
-  panel.innerHTML = html;
-  panel.style.display = 'block';
+  card.innerHTML = html;
+  card.style.display = 'block';
+  
+  /* 부드러운 스크롤 — 지도 영역으로 자동 이동 */
+  card.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
 /* 시별 마커 렌더 — records에서 sigungu별 평균 계산

@@ -1086,19 +1086,17 @@ function hideKreiSplash(){
             <div class="nat-num" id="natAvgNum">—<span style="font-size:14px;opacity:.5">%</span></div>
             <div class="nat-lbl">전국 평균 착색률</div>
           </div>
-          <!-- ★ 2026-05-22 v14.6: sticky 박스 그룹 - 스크롤 시 따라옴 -->
-          <div id="stickyInfoGroup" style="position:sticky;top:8px;z-index:5;margin-bottom:8px">
-            <!-- 시·군 TOP 10 -->
-            <div id="topCitiesBox" style="background:rgba(13,13,16,0.92);border:1px solid rgba(127,198,245,0.25);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:none;backdrop-filter:blur(8px);box-shadow:0 4px 12px rgba(0,0,0,0.4)">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                <span style="font-family:var(--fm);font-size:12px;font-weight:700;color:var(--cream);letter-spacing:0.5px">🏆 시·군 착색률 TOP 10</span>
-                <span id="topCitiesSubLbl" style="font-family:var(--mm);font-size:9px;color:var(--muted)">n≥5 기준</span>
-              </div>
-              <div id="topCitiesList" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-family:var(--fm);font-size:11px"></div>
+          <!-- ★ 2026-05-22 v14.7: 두 박스 각자 sticky로 - 호환성 개선 -->
+          <!-- 시·군 TOP 10 -->
+          <div id="topCitiesBox" style="position:sticky;top:8px;z-index:6;background:rgba(13,13,16,0.95);border:1px solid rgba(127,198,245,0.3);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(0,0,0,0.5)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-family:var(--fm);font-size:12px;font-weight:700;color:var(--cream);letter-spacing:0.5px">🏆 시·군 착색률 TOP 10</span>
+              <span id="topCitiesSubLbl" style="font-family:var(--mm);font-size:9px;color:var(--muted)">n≥5 기준</span>
             </div>
-            <!-- 시 클릭 시 상세 카드 (시·군 선택 박스) -->
-            <div id="sigunguDetailCard" style="background:rgba(13,13,16,0.92);border:1px solid rgba(127,198,245,0.4);border-radius:var(--r);padding:14px 16px;margin-bottom:8px;display:none;backdrop-filter:blur(8px);box-shadow:0 4px 12px rgba(0,0,0,0.4)"></div>
+            <div id="topCitiesList" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-family:var(--fm);font-size:11px"></div>
           </div>
+          <!-- 시 클릭 시 상세 카드 -->
+          <div id="sigunguDetailCard" style="position:sticky;top:8px;z-index:7;background:rgba(13,13,16,0.95);border:1px solid rgba(127,198,245,0.5);border-radius:var(--r);padding:14px 16px;margin-bottom:8px;display:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(0,0,0,0.5)"></div>
           <div id="svgMapWrap" style="background:#0d0d10;border-radius:var(--r);overflow:hidden;margin-bottom:8px;border:1px solid rgba(127,198,245,.3);padding:6px;position:relative">
             <!-- 2026-05-22 줌 복귀 버튼 (줌인 상태에서만 보임) -->
             <button id="zoomBackBtn" onclick="resetMapZoom()" style="display:none;position:absolute;top:12px;left:12px;z-index:10;padding:6px 12px;background:rgba(13,13,16,0.92);border:1px solid var(--cream);color:var(--cream);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fm);backdrop-filter:blur(4px)">← 전체 지도</button>
@@ -1114,7 +1112,7 @@ function hideKreiSplash(){
               <!-- 광역시 표시 (선택사항) -->
               <g id="cityGroup"></g>
               <!-- ★ 2026-05-22 v13.3: 시·군 경계 (줌인 시에만 fade-in) -->
-              <g id="sigunguGroup" style="opacity:0;transition:opacity 0.6s ease;pointer-events:none"></g>
+              <g id="sigunguGroup" style="opacity:0;transition:opacity 0.6s ease"></g>
               <!-- 위치 마커 -->
               <g id="markerGroup"></g>
               <!-- 2026-05-22 시 마커 (줌인 시) -->
@@ -7820,9 +7818,14 @@ function renderTopCities(){
   var subLbl = document.getElementById('topCitiesSubLbl');
   if(!box || !list) return;
   
-  var records = loadAllRecords();
+  /* ★ 2026-05-22 v14.7: 박스는 항상 표시. 데이터 없으면 안내 메시지 */
+  box.style.display = 'block';
+  
+  var records = (typeof loadAllRecords === 'function') ? loadAllRecords() : [];
+  
   if(!records || records.length === 0){
-    box.style.display = 'none';
+    list.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--muted);font-size:11px;padding:8px 0">아직 측정 데이터가 없습니다</div>';
+    subLbl.textContent = '데이터 없음';
     return;
   }
   
@@ -7837,30 +7840,39 @@ function renderTopCities(){
     byCity[city].count += 1;
   }
   
-  /* 배열로 변환 + n≥5 필터 */
-  var cities = [];
+  /* 신뢰 시·군 (n≥5) + 참고용 시·군 (n<5) 분리 */
+  var trustCities = [], refCities = [];
   for(var k in byCity){
     if(!byCity.hasOwnProperty(k)) continue;
     var c = byCity[k];
-    if(c.count < 5) continue; /* 표본 5개 미만 제외 */
     c.avg = c.sum / c.count;
-    cities.push(c);
+    if(c.count >= 5) trustCities.push(c);
+    else refCities.push(c);
   }
   
-  /* 신뢰할 만한 시·군 없으면 박스 숨김 */
-  if(cities.length === 0){
-    box.style.display = 'none';
-    return;
-  }
-  
-  /* 정렬: 평균 내림차순, 같으면 표본 많은 순 */
-  cities.sort(function(a,b){
+  /* 정렬 */
+  function sortFn(a,b){
     if(b.avg !== a.avg) return b.avg - a.avg;
     return b.count - a.count;
-  });
+  }
+  trustCities.sort(sortFn);
+  refCities.sort(sortFn);
   
-  /* 상위 10개 추출 */
-  var top = cities.slice(0, 10);
+  /* 신뢰 시·군이 있으면 그것만 TOP10, 없으면 참고용도 보여줌 */
+  var top, isRef = false;
+  if(trustCities.length > 0){
+    top = trustCities.slice(0, 10);
+    subLbl.textContent = '신뢰 데이터 ' + trustCities.length + '개 시·군 중 TOP ' + top.length;
+  } else {
+    top = refCities.slice(0, 10);
+    isRef = true;
+    subLbl.textContent = '참고용 (n<5) · 신뢰 데이터 모이면 갱신';
+  }
+  
+  if(top.length === 0){
+    list.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--muted);font-size:11px;padding:8px 0">시·군 정보가 있는 측정 데이터가 없습니다</div>';
+    return;
+  }
   
   /* 렌더링 */
   var html = '';
@@ -7869,22 +7881,20 @@ function renderTopCities(){
     var card = (typeof getCard === 'function') ? getCard(t.avg) : {color:'#9d9d77'};
     var rank = r + 1;
     var rankBadge = rank <= 3 
-      ? '<span style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;background:'+card.color+';color:#0d0d10;border-radius:50%;font-weight:800;font-size:10px;margin-right:6px">'+rank+'</span>'
+      ? '<span style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;background:'+card.color+';color:#0d0d10;border-radius:50%;font-weight:800;font-size:10px;margin-right:6px;opacity:'+(isRef?'0.5':'1')+'">'+rank+'</span>'
       : '<span style="display:inline-block;width:18px;text-align:center;color:var(--muted);font-weight:600;margin-right:6px;font-size:10px">'+rank+'</span>';
     
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0">';
+    html += '<div onclick="clickSigungu(\''+t.name.replace(/'/g, "\\'")+'\')" style="display:flex;align-items:center;justify-content:space-between;padding:4px 6px;cursor:pointer;border-radius:4px" onmouseover="this.style.background=\'rgba(127,198,245,0.08)\'" onmouseout="this.style.background=\'transparent\'">';
     html += '<span style="display:flex;align-items:center;min-width:0">' + rankBadge;
     html += '<span style="color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+t.name+'</span>';
     html += '</span>';
     html += '<span style="display:flex;align-items:baseline;gap:5px;flex-shrink:0">';
-    html += '<span style="color:'+card.color+';font-weight:700">'+t.avg.toFixed(0)+'%</span>';
+    html += '<span style="color:'+card.color+';font-weight:700;opacity:'+(isRef?'0.6':'1')+'">'+t.avg.toFixed(0)+'%</span>';
     html += '<span style="color:var(--muted);font-size:9px">n='+t.count+'</span>';
     html += '</span></div>';
   }
   
   list.innerHTML = html;
-  subLbl.textContent = '신뢰 데이터 ' + cities.length + '개 시·군 중 TOP ' + top.length;
-  box.style.display = 'block';
 }
 
 function renderRegionList(data){

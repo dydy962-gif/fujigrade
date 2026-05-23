@@ -373,6 +373,30 @@ nav{
 
 /* 지도 */
 .map-sec{margin-bottom:13px;padding-bottom:13px;border-bottom:1px solid var(--border)}
+
+/* ★ 2026-05-22 v14.9: 박스 측정 결과 - 가로 화면(태블릿+)에서만 우측 고정
+   모바일에선 일반 흐름 유지 (좁아서 우측 분리 불가)
+   PC/태블릿: position:fixed로 화면 우측에 고정, 다른 컨텐츠는 좌측으로 밀림 */
+@media (min-width: 1024px){
+  .result-panel-sticky{
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    width: 380px;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    z-index: 50;
+    background: var(--bg2);
+    border: 1px solid rgba(127,198,245,0.25);
+    border-radius: var(--r);
+    padding: 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  /* 좌측 컨텐츠는 박스 결과 폭만큼 여백 두어 안 겹치게 */
+  #page-analyze{
+    padding-right: 408px;
+  }
+}
 .map-wrap{background:var(--bg3);border-radius:var(--r);overflow:hidden;margin-bottom:8px;position:relative}
 .map-wrap svg{width:100%;height:auto;display:block}
 .map-region{fill:#1a1a1a;stroke:rgba(127,198,245,.25);stroke-width:1.5;cursor:pointer;transition:fill .2s}
@@ -1088,7 +1112,7 @@ function hideKreiSplash(){
           </div>
           <!-- ★ 2026-05-22 v14.7: 두 박스 각자 sticky로 - 호환성 개선 -->
           <!-- 시·군 TOP 10 -->
-          <div id="topCitiesBox" style="position:sticky;top:8px;z-index:6;background:rgba(13,13,16,0.95);border:1px solid rgba(127,198,245,0.3);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(0,0,0,0.5)">
+          <div id="topCitiesBox" style="background:rgba(13,13,16,0.95);border:1px solid rgba(127,198,245,0.3);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(0,0,0,0.5)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <span style="font-family:var(--fm);font-size:12px;font-weight:700;color:var(--cream);letter-spacing:0.5px">🏆 시·군 착색률 TOP 10</span>
               <span id="topCitiesSubLbl" style="font-family:var(--mm);font-size:9px;color:var(--muted)">n≥5 기준</span>
@@ -1096,7 +1120,7 @@ function hideKreiSplash(){
             <div id="topCitiesList" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-family:var(--fm);font-size:11px"></div>
           </div>
           <!-- 시 클릭 시 상세 카드 -->
-          <div id="sigunguDetailCard" style="position:sticky;top:8px;z-index:7;background:rgba(13,13,16,0.95);border:1px solid rgba(127,198,245,0.5);border-radius:var(--r);padding:14px 16px;margin-bottom:8px;display:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(0,0,0,0.5)"></div>
+          <div id="sigunguDetailCard" style="background:rgba(13,13,16,0.95);border:1px solid rgba(127,198,245,0.5);border-radius:var(--r);padding:14px 16px;margin-bottom:8px;display:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(0,0,0,0.5)"></div>
           <div id="svgMapWrap" style="background:#0d0d10;border-radius:var(--r);overflow:hidden;margin-bottom:8px;border:1px solid rgba(127,198,245,.3);padding:6px;position:relative">
             <!-- 2026-05-22 줌 복귀 버튼 (줌인 상태에서만 보임) -->
             <button id="zoomBackBtn" onclick="resetMapZoom()" style="display:none;position:absolute;top:12px;left:12px;z-index:10;padding:6px 12px;background:rgba(13,13,16,0.92);border:1px solid var(--cream);color:var(--cream);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fm);backdrop-filter:blur(4px)">← 전체 지도</button>
@@ -1168,7 +1192,8 @@ function hideKreiSplash(){
         </div>
       </div>
 
-      <div id="resultPanel" style="display:none">
+      <!-- ★ 2026-05-22 v14.9: 박스 측정 결과 - 가로 화면에선 우측 sticky -->
+      <div id="resultPanel" class="result-panel-sticky" style="display:none">
 
         <div class="result-hero">
           <div class="res-color-box" id="resColorBox"></div>
@@ -7590,6 +7615,156 @@ function clickSigungu(cityName){
   
   /* 부드러운 스크롤 — 지도 영역으로 자동 이동 */
   card.scrollIntoView({behavior: 'smooth', block: 'start'});
+  
+  /* ★ 2026-05-22 v14.9: 2주 평균 날씨 비동기 로딩 */
+  loadSigunguWeather(cityName);
+}
+
+/* ★ 2026-05-22 v14.9: 시·군 2주 평균 날씨 가져오기 (Open-Meteo)
+   1) SIGUNGU_PATHS에서 시·군 path 중심 좌표 추출
+   2) SVG 좌표 → 위경도 역변환 (메모리에 저장된 식 사용)
+   3) Open-Meteo API 호출
+   4) 카드에 날씨 섹션 추가 */
+function loadSigunguWeather(cityName){
+  var card = document.getElementById('sigunguDetailCard');
+  if(!card) return;
+  
+  /* 1) SIGUNGU_PATHS 전체에서 해당 시·군 찾기 */
+  var found = null;
+  if(typeof SIGUNGU_PATHS !== 'undefined'){
+    for(var regId in SIGUNGU_PATHS){
+      if(!SIGUNGU_PATHS.hasOwnProperty(regId)) continue;
+      var sigs = SIGUNGU_PATHS[regId];
+      for(var i=0; i<sigs.length; i++){
+        if(sigs[i].n === cityName){
+          found = sigs[i];
+          break;
+        }
+      }
+      if(found) break;
+    }
+  }
+  
+  if(!found){
+    /* path 없으면 날씨 영역에 메시지만 */
+    appendWeatherSection(card, null, '좌표 없음');
+    return;
+  }
+  
+  /* 2) path 중심 SVG 좌표 → 위경도 변환
+     변환식: x = 100.143*lon - 12564, y = -111.065*lat + 4302.3
+     역산: lon = (x + 12564) / 100.143, lat = (4302.3 - y) / 111.065 */
+  var nums = found.d.match(/-?\d+\.?\d*/g);
+  if(!nums || nums.length < 4){
+    appendWeatherSection(card, null, '좌표 파싱 실패');
+    return;
+  }
+  var minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+  for(var k=0; k<nums.length-1; k+=2){
+    var x = parseFloat(nums[k]);
+    var y = parseFloat(nums[k+1]);
+    if(!isFinite(x) || !isFinite(y)) continue;
+    if(x < minX) minX = x;
+    if(x > maxX) maxX = x;
+    if(y < minY) minY = y;
+    if(y > maxY) maxY = y;
+  }
+  var svgCx = (minX + maxX) / 2;
+  var svgCy = (minY + maxY) / 2;
+  var lon = (svgCx + 12564) / 100.143;
+  var lat = (4302.3 - svgCy) / 111.065;
+  
+  /* 한국 위경도 범위 검증 (33~38, 124~132) */
+  if(lat < 32 || lat > 39 || lon < 123 || lon > 133){
+    appendWeatherSection(card, null, '좌표 범위 이상 (lat='+lat.toFixed(1)+', lon='+lon.toFixed(1)+')');
+    return;
+  }
+  
+  /* 3) 날씨 로딩 메시지 표시 */
+  appendWeatherSection(card, null, '🌦️ 날씨 데이터 가져오는 중...');
+  
+  /* 4) Open-Meteo API 호출 - 과거 14일 */
+  var url = 'https://api.open-meteo.com/v1/forecast?latitude='+lat.toFixed(4)
+    + '&longitude='+lon.toFixed(4)
+    + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,sunshine_duration'
+    + '&past_days=14&forecast_days=1&timezone=Asia%2FSeoul';
+  
+  fetch(url)
+    .then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    })
+    .then(function(d){
+      if(!d || !d.daily || !d.daily.time || d.daily.time.length === 0){
+        appendWeatherSection(card, null, '응답 데이터 없음');
+        return;
+      }
+      /* 14일 평균 계산 (최근 14일만 - 예보 1일 제외) */
+      var days = d.daily;
+      var n = Math.min(14, days.time.length);
+      var sumMax=0, sumMin=0, sumRain=0, sumSun=0;
+      var cntT=0, cntR=0, cntS=0;
+      for(var di=0; di<n; di++){
+        if(typeof days.temperature_2m_max[di] === 'number'){ sumMax += days.temperature_2m_max[di]; cntT++; }
+        if(typeof days.temperature_2m_min[di] === 'number'){ sumMin += days.temperature_2m_min[di]; }
+        if(typeof days.precipitation_sum[di] === 'number'){ sumRain += days.precipitation_sum[di]; cntR++; }
+        if(typeof days.sunshine_duration[di] === 'number'){ sumSun += days.sunshine_duration[di]; cntS++; }
+      }
+      var avgMax = cntT > 0 ? (sumMax / cntT).toFixed(1) : '-';
+      var avgMin = cntT > 0 ? (sumMin / cntT).toFixed(1) : '-';
+      var avgRain = cntR > 0 ? (sumRain / cntR).toFixed(1) : '-';
+      var avgSun = cntS > 0 ? (sumSun / cntS / 3600).toFixed(1) : '-'; /* 초 → 시간 */
+      
+      appendWeatherSection(card, {
+        avgMax: avgMax, avgMin: avgMin, avgRain: avgRain, avgSun: avgSun, days: n
+      }, null);
+    })
+    .catch(function(e){
+      console.error('[loadSigunguWeather] 실패:', e);
+      appendWeatherSection(card, null, '날씨 조회 실패: '+e.message);
+    });
+}
+
+/* 카드 안 날씨 섹션 추가/갱신 */
+function appendWeatherSection(card, data, message){
+  if(!card) return;
+  /* 기존 날씨 섹션 제거 */
+  var oldSection = card.querySelector('.weather-section');
+  if(oldSection) oldSection.remove();
+  
+  var section = document.createElement('div');
+  section.className = 'weather-section';
+  section.style.cssText = 'margin-top:12px;padding-top:10px;border-top:1px solid rgba(127,198,245,0.18)';
+  
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+  html += '<span style="font-size:11px;color:var(--cream);font-weight:600">🌤 최근 2주 평균 날씨</span>';
+  if(data) html += '<span style="font-size:9px;color:var(--muted)">'+data.days+'일 평균</span>';
+  html += '</div>';
+  
+  if(data){
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-family:var(--fm)">';
+    /* 기온 (최고/최저) */
+    html += '<div style="background:rgba(255,140,100,0.08);padding:6px 8px;border-radius:4px">';
+    html += '<div style="font-size:9px;color:var(--muted)">🌡 기온</div>';
+    html += '<div style="font-size:13px;font-weight:700;color:#ffb088">'+data.avgMax+'°<span style="font-size:10px;color:var(--muted)">/'+data.avgMin+'°</span></div>';
+    html += '</div>';
+    /* 강수량 */
+    html += '<div style="background:rgba(100,180,255,0.08);padding:6px 8px;border-radius:4px">';
+    html += '<div style="font-size:9px;color:var(--muted)">🌧 강수량</div>';
+    html += '<div style="font-size:13px;font-weight:700;color:#7fc6f5">'+data.avgRain+'<span style="font-size:10px;color:var(--muted)">mm/일</span></div>';
+    html += '</div>';
+    /* 일조 */
+    html += '<div style="background:rgba(255,210,100,0.08);padding:6px 8px;border-radius:4px;grid-column:1/-1">';
+    html += '<div style="font-size:9px;color:var(--muted)">☀️ 일조 시간</div>';
+    html += '<div style="font-size:13px;font-weight:700;color:#ffd266">'+data.avgSun+'<span style="font-size:10px;color:var(--muted)">시간/일</span></div>';
+    html += '</div>';
+    html += '</div>';
+  } else {
+    html += '<div style="font-size:10px;color:var(--muted);text-align:center;padding:4px 0">'+(message||'데이터 없음')+'</div>';
+  }
+  
+  section.innerHTML = html;
+  card.appendChild(section);
 }
 
 /* 시별 마커 렌더 — records에서 sigungu별 평균 계산

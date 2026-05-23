@@ -376,6 +376,105 @@ nav{
 
 /* 지도 */
 .map-sec{margin-bottom:13px;padding-bottom:13px;border-bottom:1px solid var(--border)}
+
+/* ★ 2026-05-23 v15.2: 결과 사이드 바 - 우측에서 슬라이드 인/아웃
+   - 모바일: 화면 전체 폭 (90vw)
+   - 태블릿+: 380px 고정
+   - body 위에 떠 있음 (position:fixed) */
+
+.result-sidebar-backdrop{
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 997;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.result-sidebar-backdrop.is-open{
+  display: block;
+  opacity: 1;
+}
+
+.result-sidebar{
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 90vw;
+  max-width: 420px;
+  background: var(--bg2);
+  border-left: 1px solid rgba(127, 198, 245, 0.3);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+  z-index: 998;
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.result-sidebar.is-open{ transform: translateX(0); }
+
+.result-sidebar-header{
+  padding: 14px 18px;
+  font-family: var(--fm);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cream);
+  border-bottom: 1px solid rgba(127, 198, 245, 0.18);
+  background: rgba(13, 13, 16, 0.5);
+  flex-shrink: 0;
+  padding-right: 50px;
+}
+
+.result-sidebar-close{
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(127, 198, 245, 0.12);
+  border: 1px solid rgba(127, 198, 245, 0.3);
+  color: var(--cream);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: background 0.15s;
+  font-family: var(--fm);
+  padding: 0;
+}
+.result-sidebar-close:hover{ background: rgba(127, 198, 245, 0.25); }
+
+.result-sidebar-content{
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* "📦 결과 보기" 헤더 버튼 */
+.result-sidebar-open-btn{
+  display: none;
+  padding: 6px 12px;
+  background: rgba(127, 198, 245, 0.15);
+  border: 1px solid rgba(127, 198, 245, 0.4);
+  border-radius: 6px;
+  color: var(--cream);
+  font-family: var(--fm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.result-sidebar-open-btn:hover{ background: rgba(127, 198, 245, 0.25); }
+.result-sidebar-open-btn.is-available{ display: inline-flex; align-items: center; gap: 4px; }
 .map-wrap{background:var(--bg3);border-radius:var(--r);overflow:hidden;margin-bottom:8px;position:relative}
 .map-wrap svg{width:100%;height:auto;display:block}
 .map-region{fill:#1a1a1a;stroke:rgba(127,198,245,.25);stroke-width:1.5;cursor:pointer;transition:fill .2s}
@@ -791,11 +890,12 @@ function hideKreiSplash(){
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('analyze',this)">분석</button>
-    <button class="nav-tab" onclick="showPage('result',this)" id="navTabResult">결과</button>
     <button class="nav-tab" onclick="showPage('records',this)">기록</button>
     <button class="nav-tab" onclick="showPage('refs',this)">참고 자료</button>
   </div>
   <div class="nav-right">
+    <!-- ★ v15.2: 결과 사이드 바 열기 버튼 (측정 결과 있을 때 활성) -->
+    <button class="result-sidebar-open-btn" onclick="openResultSidebar()" title="박스 측정 결과 보기" id="navResultBtn">📦 결과</button>
     <button onclick="reopenBatchPanel()" style="background:transparent;border:1px solid rgba(127,198,245,.2);color:var(--accent);padding:5px 10px;border-radius:4px;font-size:11px;cursor:pointer" title="일괄 결과 패널 열기" id="navBatchBtn">📋 결과 패널</button>
     <button onclick="showAISettings()" style="background:transparent;border:1px solid rgba(127,198,245,.2);color:var(--accent);padding:5px 10px;border-radius:4px;font-size:11px;cursor:pointer" title="AI API 키 설정">🔑 AI</button>
     <span class="nav-spec">v22 · NIAS</span>
@@ -1233,20 +1333,24 @@ function hideKreiSplash(){
   </div><!-- /analyze-wrap -->
 </div><!-- /page-analyze -->
 
-<!-- ★ 2026-05-23 v15.1: 결과 탭 - 박스 측정 결과 전용 페이지
-     사용자 요청: "별도의 창처럼" → 새 탭으로 분리
-     resultPanel은 페이지 로드 시 JS로 이 안으로 이동됨 -->
-<div id="page-result" class="page">
-  <div class="result-page-wrap" style="max-width:560px;margin:0 auto;padding:18px">
-    <!-- 결과 없을 때 안내 -->
-    <div id="resultPageEmpty" style="text-align:center;padding:48px 20px;color:var(--muted)">
-      <div style="font-size:48px;margin-bottom:12px">📦</div>
-      <div style="font-size:14px;color:var(--cream);margin-bottom:6px">아직 측정 결과가 없습니다</div>
-      <div style="font-size:11px;line-height:1.6">분석 탭에서 사진을 업로드하고<br>판정을 실행하면 여기에 결과가 표시됩니다</div>
-      <button onclick="showPage('analyze', document.querySelector('.nav-tab'))" style="margin-top:20px;padding:8px 20px;background:var(--action);color:#0a0a0a;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--fm)">← 분석 탭으로</button>
-    </div>
+<!-- ★ 2026-05-23 v15.2: 결과 사이드 바 - 우측에서 슬라이드 인/아웃
+     사용자 요청 4번: "사이드 바 (좌/우측에서 타고 나오는 패널)"
+     - 측정 완료 시 자동 열림
+     - "📦 결과 보기" 버튼으로 다시 열기
+     - × 버튼 / 바깥 클릭 / ESC로 닫기 -->
+<div id="resultSidebarBackdrop" class="result-sidebar-backdrop" onclick="closeResultSidebar()"></div>
+<div id="resultSidebar" class="result-sidebar">
+  <button class="result-sidebar-close" onclick="closeResultSidebar()" aria-label="닫기">×</button>
+  <div class="result-sidebar-header">📦 박스 측정 결과</div>
+  <div class="result-sidebar-content">
     <!-- resultPanel이 페이지 로드 시 여기로 옮겨짐 -->
-    <div id="resultPageContainer"></div>
+    <div id="resultSidebarContainer"></div>
+    <!-- 결과 없을 때 안내 -->
+    <div id="resultSidebarEmpty" style="text-align:center;padding:48px 20px;color:var(--muted);display:none">
+      <div style="font-size:48px;margin-bottom:12px">📦</div>
+      <div style="font-size:13px;color:var(--cream);margin-bottom:6px">아직 측정 결과가 없습니다</div>
+      <div style="font-size:11px;line-height:1.6">분석 탭에서 사진을 측정하면<br>여기에 결과가 표시됩니다</div>
+    </div>
   </div>
 </div>
 
@@ -3786,8 +3890,8 @@ function showBoxResult(photoObj){
     panel.style.display = 'block';
     if(empty) empty.style.display = 'none';
     
-    /* ★ v15.1: 결과 탭의 비어있음 상태 갱신 */
-    if(typeof updateResultPageEmptyState === 'function') updateResultPageEmptyState();
+    /* ★ v15.2: 결과 사이드 바 버튼 활성화 */
+    if(typeof activateResultSidebarButton === 'function') activateResultSidebarButton();
     
     /* 박스 결과 전용 HTML 구성 */
     var html = '<div style="margin-bottom:14px">' +
@@ -3912,8 +4016,9 @@ function showBoxResult(photoObj){
       '</div></div>';
     
     panel.innerHTML = html;
-    /* ★ v15.1: 박스 측정 결과 완료 → 결과 탭 자동 이동 */
-    if(typeof gotoResultTab === 'function') setTimeout(gotoResultTab, 200);
+    /* ★ v15.2: 박스 측정 결과 완료 → 사이드 바 자동 열기 + 버튼 활성화 */
+    if(typeof activateResultSidebarButton === 'function') activateResultSidebarButton();
+    if(typeof openResultSidebar === 'function') setTimeout(openResultSidebar, 200);
   }
 }
 
@@ -7536,45 +7641,70 @@ function renderSigunguBorders(regionId){
    - 표본 수, 신뢰도
    - 등급 분포 (G1~G5 비율)
    - 최근 측정일 */
-/* ★ 2026-05-23 v15.1: 결과는 별도 탭(page-result)으로 표시
-   사용자 요청: "별도의 창처럼" → 새 탭으로 분리
-   - 측정 완료 시 자동으로 결과 탭 이동
-   - 결과 탭의 resultPanel은 페이지 로드 시 JS로 옮겨짐
-   - 분석 탭 다시 누르면 측정 화면으로 돌아감 */
+/* ★ 2026-05-23 v15.2: 결과 사이드 바 열기/닫기
+   사용자 요청 4번: 우측에서 슬라이드 패널
+   - 측정 완료 시 자동 열림
+   - "📦 결과 보기" 버튼으로 재열기
+   - × 버튼 / 바깥 클릭 / ESC로 닫기 */
 
-/* 결과 탭으로 이동 + 결과 패널 표시 처리 */
-function gotoResultTab(){
-  /* 결과 탭 버튼 찾아서 클릭 */
-  var btn = document.getElementById('navTabResult');
-  if(btn) btn.click();
-  /* 결과 페이지 비어있음 상태 갱신 */
-  updateResultPageEmptyState();
+function openResultSidebar(){
+  var bar = document.getElementById('resultSidebar');
+  var backdrop = document.getElementById('resultSidebarBackdrop');
+  var panel = document.getElementById('resultPanel');
+  var empty = document.getElementById('resultSidebarEmpty');
+  if(!bar || !backdrop) return;
+  
+  /* 결과 유무에 따라 적절한 화면 표시 */
+  var hasResult = panel && panel.innerHTML.trim() !== '' && panel.style.display !== 'none';
+  if(empty) empty.style.display = hasResult ? 'none' : 'block';
+  if(panel) panel.style.display = hasResult ? 'block' : 'none';
+  
+  bar.classList.add('is-open');
+  backdrop.classList.add('is-open');
+  /* body 스크롤 잠금 */
+  document.body.style.overflow = 'hidden';
 }
 
-/* 결과 페이지의 "비어있음" vs "결과 표시" 상태 갱신 */
-function updateResultPageEmptyState(){
-  var panel = document.getElementById('resultPanel');
-  var empty = document.getElementById('resultPageEmpty');
-  if(!panel || !empty) return;
-  var hasResult = panel.innerHTML.trim() !== '' && panel.style.display !== 'none';
-  empty.style.display = hasResult ? 'none' : 'block';
-  panel.style.display = hasResult ? 'block' : 'none';
+function closeResultSidebar(){
+  var bar = document.getElementById('resultSidebar');
+  var backdrop = document.getElementById('resultSidebarBackdrop');
+  if(!bar || !backdrop) return;
+  bar.classList.remove('is-open');
+  backdrop.classList.remove('is-open');
+  document.body.style.overflow = '';
 }
 
-/* 페이지 로드 시 resultPanel을 결과 탭으로 옮기기 */
-function moveResultPanelToTab(){
+/* "📦 결과 보기" 헤더 버튼 활성화 (측정 완료 후 호출) */
+function activateResultSidebarButton(){
+  var btns = document.querySelectorAll('.result-sidebar-open-btn');
+  for(var i=0;i<btns.length;i++){
+    btns[i].classList.add('is-available');
+  }
+}
+
+/* ESC 키로 사이드 바 닫기 */
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape'){
+    var bar = document.getElementById('resultSidebar');
+    if(bar && bar.classList.contains('is-open')){
+      closeResultSidebar();
+    }
+  }
+});
+
+/* 페이지 로드 시 resultPanel을 사이드 바 컨테이너로 옮기기 */
+function moveResultPanelToSidebar(){
   var panel = document.getElementById('resultPanel');
-  var container = document.getElementById('resultPageContainer');
+  var container = document.getElementById('resultSidebarContainer');
   if(panel && container && !container.contains(panel)){
     container.appendChild(panel);
   }
 }
 
-/* 페이지 로드 후 실행 */
 if(document.readyState === 'loading'){
-  document.addEventListener('DOMContentLoaded', moveResultPanelToTab);
+  document.addEventListener('DOMContentLoaded', moveResultPanelToSidebar);
 } else {
-  moveResultPanelToTab();
+  moveResultPanelToSidebar();
 }
 
 function clickSigungu(cityName){

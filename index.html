@@ -31,7 +31,10 @@ button{font-family:var(--fm);cursor:pointer}
 img{max-width:100%;display:block}
 
 /* X-RAY 공통 모션 */
-@keyframes pageFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+/* ★ 2026-05-23 v14.10: transform 제거 - 자식의 position:fixed가 viewport 기준으로 작동하도록
+   이전: transform:translateY → page-analyze가 contain context 되어 fixed 자식이 부모 기준
+   현재: opacity만 페이드 → fixed가 viewport 기준으로 정상 작동 */
+@keyframes pageFadeIn{from{opacity:0}to{opacity:1}}
 @keyframes tabSlide{from{opacity:0}to{opacity:1}}
 @keyframes dotBlink{0%,100%{opacity:.3}50%{opacity:1}}
 .page.active{animation:pageFadeIn .35s ease-out both}

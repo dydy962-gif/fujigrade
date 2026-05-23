@@ -54,27 +54,30 @@ nav{
   background:rgba(13,13,16,.96);backdrop-filter:blur(14px);
   border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:14px;
-  padding:0 20px;height:56px;
+  /* ★ v15.17: 헤더 높이 56→72px (KREI 미니 인장 마크 들어갈 공간) */
+  padding:0 20px;height:72px;
 }
 .nav-brand{display:flex;align-items:center;gap:10px;white-space:nowrap;animation:kreiFadeUp .4s ease-out both}
 .nav-brand-mark{
-  width:26px;height:26px;border-radius:50%;background:#fff;
+  /* ★ v15.17: 헤더 72px에 맞게 마크 56→64px (디테일 더 잘 보이게) */
+  width:64px;height:64px;flex-shrink:0;position:relative;
   display:flex;align-items:center;justify-content:center;
-  position:relative;flex-shrink:0;
+  transition:transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor:default;
 }
-.nav-brand-mark::before{
-  content:'';position:absolute;width:10px;height:10px;
-  background:#0066b2;border-radius:0 100% 0 100%;
-  transform:rotate(-45deg);top:6px;left:8px;
+.nav-brand:hover .nav-brand-mark{
+  /* 호버 시 미세 회전 + 살짝 키움 (인장이 살아있는 느낌) */
+  transform:rotate(8deg) scale(1.05);
 }
-.nav-brand-r{
-  position:relative;font-family:'Fraunces',Georgia,serif;
-  font-size:15px;font-weight:900;color:#003a66;
-  z-index:1;line-height:1;margin-top:2px;margin-left:-2px;letter-spacing:-.5px;
+.nav-brand-mark svg{width:100%;height:100%;display:block;overflow:visible}
+.nav-brand-mark .nb-kr{
+  fill:#00d9b8;font-family:-apple-system,'Pretendard',sans-serif;
+  font-weight:900;letter-spacing:-0.8px;
 }
+.nav-brand-r{display:none}  /* 옛 R 글자 숨김 */
 .nav-brand-txt{display:flex;flex-direction:column;line-height:1.1}
 .nav-brand-ko{font-size:11px;color:var(--cream);font-weight:500;letter-spacing:.02em}
-.nav-brand-en{font-family:var(--mm);font-size:8px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:2px}
+.nav-brand-en{font-family:var(--mm);font-size:7.5px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-top:2px;white-space:nowrap}
 
 .nav-logo{display:none}
 .nav-tabs{display:flex;gap:2px;flex:1;justify-content:center}
@@ -108,7 +111,7 @@ nav{
 .analyze-wrap{
   display:grid;
   grid-template-columns:1fr 360px;
-  min-height:calc(100vh - 52px);
+  min-height:calc(100vh - 72px);
   align-items:start;
 }
 @media(max-width:960px){.analyze-wrap{grid-template-columns:1fr}}
@@ -687,7 +690,7 @@ nav{
 
 /* 좌/우 데이터 메트릭 (더 크게) */
 .kr-data-left{
-  position:absolute;left:clamp(20px, 3vw, 60px);top:50%;
+  position:absolute;left:clamp(120px, calc(3vw + 100px), 180px);top:50%;
   transform:translateY(-50%);
   display:flex;flex-direction:column;gap:clamp(12px, 1.8vh, 24px);
   font-family:'JetBrains Mono','Courier New',monospace;
@@ -710,7 +713,7 @@ nav{
 }
 
 .kr-data-right{
-  position:absolute;right:clamp(20px, 3vw, 60px);top:50%;
+  position:absolute;right:clamp(120px, calc(3vw + 100px), 180px);top:50%;
   transform:translateY(-50%);
   display:flex;flex-direction:column;gap:clamp(12px, 1.8vh, 24px);
   text-align:right;
@@ -813,6 +816,79 @@ nav{
   .kr-emblem{width:220px;height:220px}
   .kr-status-bar{font-size:9px;gap:10px}
 }
+
+/* ★ v15.13: 인장 슬라이드 모션 - 사용자가 진짜 슬라이드 보이게
+   이전 v15.12 문제: 데이터/배경이 동시에 페이드 아웃되어 슬라이드 가려짐
+   수정:
+   - 인장만 1.0초 슬라이드 (좌상단으로 줄어들며 이동)
+   - 다른 요소는 0.2초 후부터 짧게 페이드 아웃 (인장 슬라이드 시작 보이게)
+   - 배경은 인장이 절반쯤 갔을 때 페이드 (0.5초부터)
+   - cubic-bezier(0.4, 0.0, 0.2, 1) = 빠르게 시작, 부드럽게 도착 */
+
+@keyframes krEmblemFly{
+  0%{
+    transform:translate(0,0) scale(1);
+    opacity:1;
+  }
+  100%{
+    transform:translate(var(--fly-x), var(--fly-y)) scale(var(--fly-scale));
+    opacity:1;
+  }
+}
+.kr-emblem.is-flying{
+  position:fixed !important;  /* viewport 기준 이동 보장 */
+  left:var(--start-x) !important;
+  top:var(--start-y) !important;
+  margin:0 !important;
+  transform-origin:center center;
+  animation:krEmblemFly 1.0s cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
+  z-index:10000;
+  pointer-events:none;
+}
+
+/* 다른 요소들은 인장이 슬라이드 시작한 후 (0.2초 지연) 페이드 아웃
+   슬라이드가 진행 중일 때 사라지므로 사용자가 슬라이드 잘 보임 */
+#kreiSplash.is-flying .kr-data-left,
+#kreiSplash.is-flying .kr-data-right,
+#kreiSplash.is-flying .kr-status-bar,
+#kreiSplash.is-flying .kr-next,
+#kreiSplash.is-flying .kr-next-hint,
+#kreiSplash.is-flying .kr-corner,
+#kreiSplash.is-flying .kr-scan{
+  animation:krFlyFade 0.3s ease-out 0.2s forwards;
+}
+@keyframes krFlyFade{
+  from{opacity:1}
+  to{opacity:0}
+}
+
+/* 표지 배경은 인장이 거의 도착할 때 (0.7초) 페이드 */
+#kreiSplash.is-flying{
+  animation:krSplashFade 0.4s ease-out 0.7s forwards;
+}
+@keyframes krSplashFade{
+  to{background:rgba(4,6,8,0)}
+}
+
+/* 메인 컨텐츠는 인장이 절반 이동했을 때 (0.4초) 부터 페이드 인 */
+@keyframes krMainFadeIn{
+  from{opacity:0}
+  to{opacity:1}
+}
+body.is-revealing nav,
+body.is-revealing .page.active{
+  animation:krMainFadeIn 0.6s ease-out 0.4s both;
+}
+
+/* 헤더 마크 도착 시 살짝 펄스 */
+@keyframes krBrandLand{
+  0%{transform:scale(1)}
+  40%{transform:scale(1.18)}
+  100%{transform:scale(1)}
+}
+.nav-brand-mark.is-landing{
+  animation:krBrandLand 0.45s ease-out forwards;
+}
 </style>
 
 <div id="kreiSplash">
@@ -910,7 +986,65 @@ nav{
 <script>
 function hideKreiSplash(){
   var s=document.getElementById('kreiSplash');
-  if(s){s.classList.add('fade-out');setTimeout(function(){s.style.display='none';},600);}
+  if(!s) return;
+  
+  /* ★ v15.13: 인장이 좌상단 헤더로 슬라이드하는 모션
+     핵심 수정: position:fixed로 인장을 viewport 좌표에 고정 후 transform 이동
+     이전엔 인장이 flex 컨테이너 안에 있어서 부모 기준 transform이 어색했음 */
+  var emblem = s.querySelector('.kr-emblem');
+  var target = document.getElementById('navBrandMark');
+  
+  if(emblem && target){
+    /* 1) 인장 현재 위치 + 헤더 목표 위치 측정 */
+    var emRect = emblem.getBoundingClientRect();
+    var tgRect = target.getBoundingClientRect();
+    
+    /* 2) 인장 중심 → 헤더 중심 거리 계산 */
+    var emCx = emRect.left + emRect.width / 2;
+    var emCy = emRect.top + emRect.height / 2;
+    var tgCx = tgRect.left + tgRect.width / 2;
+    var tgCy = tgRect.top + tgRect.height / 2;
+    var dx = tgCx - emCx;
+    var dy = tgCy - emCy;
+    
+    /* 3) 축소 비율 = 헤더 폭 / 인장 폭 */
+    var scale = tgRect.width / emRect.width;
+    
+    console.log('[인장 슬라이드] 시작:', emCx.toFixed(0), emCy.toFixed(0), 
+                '→ 도착:', tgCx.toFixed(0), tgCy.toFixed(0),
+                '이동:', dx.toFixed(0), dy.toFixed(0),
+                '스케일:', scale.toFixed(3));
+    
+    /* 4) 인장을 position:fixed로 viewport 좌표에 고정 (slide 보장)
+       시작 좌표 = 현재 인장의 left/top (변경 전 위치) */
+    emblem.style.setProperty('--start-x', emRect.left + 'px');
+    emblem.style.setProperty('--start-y', emRect.top + 'px');
+    emblem.style.setProperty('--fly-x', dx + 'px');
+    emblem.style.setProperty('--fly-y', dy + 'px');
+    emblem.style.setProperty('--fly-scale', scale);
+    
+    /* 5) 모션 시작 */
+    s.classList.add('is-flying');
+    emblem.classList.add('is-flying');  /* 인장 자체에도 클래스 적용 (CSS의 .is-flying 매칭) */
+    document.body.classList.add('is-revealing');
+    
+    /* 6) 도착 시 헤더 펄스 (0.95초 - 슬라이드 거의 끝) */
+    setTimeout(function(){
+      target.classList.add('is-landing');
+      setTimeout(function(){
+        target.classList.remove('is-landing');
+      }, 500);
+    }, 950);
+    
+    /* 7) 표지 완전 제거 (1.3초) */
+    setTimeout(function(){
+      s.style.display='none';
+    }, 1300);
+  } else {
+    s.classList.add('fade-out');
+    setTimeout(function(){s.style.display='none';},600);
+  }
+  
   try{localStorage.setItem('kreiSplashSeen',Date.now());}catch(e){}
 }
 /* ★ 2026-05-23 v15.7: 자동 닫힘 제거 - 사용자가 '다음 →' 버튼으로 직접 넘김
@@ -948,10 +1082,60 @@ function hideKreiSplash(){
 
 <nav>
   <div class="nav-brand">
-    <div class="nav-brand-mark"><div class="nav-brand-r">R</div></div>
+    <div class="nav-brand-mark" id="navBrandMark" title="한국농촌경제연구원 · Korea Rural Economic Institute">
+      <svg viewBox="0 0 340 340" xmlns="http://www.w3.org/2000/svg">
+        <!-- ★ v15.16: 표지 인장과 완전 동일 (viewBox 340 그대로, 크기만 CSS로 축소)
+             외곽 원 + 보조 원 + 좌/우 점 + 위 영문 + 아래 한글 + 가운데 KREI -->
+        
+        <!-- 외곽 메인 원 -->
+        <circle cx="170" cy="170" r="168" fill="none" stroke="#00d9b8" stroke-width="3"/>
+        <!-- 내부 보조 원 -->
+        <circle cx="170" cy="170" r="156" fill="none" stroke="rgba(0,217,184,0.35)" stroke-width="2"/>
+        
+        <!-- 좌/우 점 장식 -->
+        <circle cx="2" cy="170" r="5" fill="#00d9b8"/>
+        <circle cx="338" cy="170" r="5" fill="#00d9b8"/>
+        
+        <!-- 위/아래 휘는 텍스트용 path -->
+        <defs>
+          <path id="nb-top-arc" d="M 22,170 A 148,148 0 0 1 318,170"/>
+          <path id="nb-bottom-arc" d="M 22,170 A 148,148 0 0 0 318,170"/>
+        </defs>
+        
+        <!-- 위쪽 영문 (반원) -->
+        <text font-family="-apple-system, 'Pretendard', sans-serif"
+              font-size="17" font-weight="700"
+              fill="rgba(232,244,240,0.9)"
+              letter-spacing="3">
+          <textPath href="#nb-top-arc" startOffset="50%" text-anchor="middle">
+            KOREA RURAL ECONOMIC INSTITUTE
+          </textPath>
+        </text>
+        
+        <!-- 아래쪽 한글 (반원) -->
+        <text font-family="-apple-system, 'Pretendard', sans-serif"
+              font-size="19" font-weight="700"
+              fill="rgba(232,244,240,0.9)"
+              letter-spacing="6">
+          <textPath href="#nb-bottom-arc" startOffset="50%" text-anchor="middle">
+            한국농촌경제연구원
+          </textPath>
+        </text>
+        
+        <!-- 가운데 KREI 큰 글자 -->
+        <text x="170" y="192" text-anchor="middle"
+              font-family="-apple-system, 'Pretendard', 'Arial Black', sans-serif"
+              font-size="84" font-weight="900"
+              fill="#00d9b8" letter-spacing="-3"
+              style="filter:drop-shadow(0 0 12px rgba(0,217,184,0.4))">
+          KREI
+        </text>
+      </svg>
+    </div>
     <div class="nav-brand-txt">
+      <!-- ★ v15.14: 한국농촌경제연구원 + 영문 풀네임 강화 (미세한 메타) -->
       <div class="nav-brand-ko">한국농촌경제연구원</div>
-      <div class="nav-brand-en">ChromaScan</div>
+      <div class="nav-brand-en">Korea Rural Economic Institute · ChromaScan</div>
     </div>
   </div>
   <div class="nav-tabs">

@@ -626,15 +626,15 @@ nav{
 }
 
 .kr-corner{
-  position:absolute;width:24px;height:24px;
+  position:absolute;width:clamp(18px, 1.8vw, 32px);height:clamp(18px, 1.8vw, 32px);
   border:1px solid #00d9b8;
   opacity:0;
   animation:krFadeIn .4s ease-out .1s both;
 }
-.kr-corner.tl{top:18px;left:18px;border-right:none;border-bottom:none}
-.kr-corner.tr{top:18px;right:18px;border-left:none;border-bottom:none}
-.kr-corner.bl{bottom:18px;left:18px;border-right:none;border-top:none}
-.kr-corner.br{bottom:18px;right:18px;border-left:none;border-top:none}
+.kr-corner.tl{top:clamp(14px, 1.5vw, 28px);left:clamp(14px, 1.5vw, 28px);border-right:none;border-bottom:none}
+.kr-corner.tr{top:clamp(14px, 1.5vw, 28px);right:clamp(14px, 1.5vw, 28px);border-left:none;border-bottom:none}
+.kr-corner.bl{bottom:clamp(14px, 1.5vw, 28px);left:clamp(14px, 1.5vw, 28px);border-right:none;border-top:none}
+.kr-corner.br{bottom:clamp(14px, 1.5vw, 28px);right:clamp(14px, 1.5vw, 28px);border-left:none;border-top:none}
 
 .kr-top-label{
   position:absolute;top:38px;left:50%;
@@ -660,7 +660,12 @@ nav{
 
 /* ★ KREI 인장 로고 (메인 요소, 매우 크게) */
 .kr-emblem{
-  position:relative;width:340px;height:340px;
+  /* ★ v15.10: 화면 크기 반응형 - 13인치~빔프로젝터 모두 비례
+     vmin(가로/세로 중 작은 쪽 기준) 사용해 항상 정사각형 유지
+     min 220px (13인치 노트북 보호), max 480px (4K/빔 캡) */
+  position:relative;
+  width:clamp(220px, 30vmin, 480px);
+  height:clamp(220px, 30vmin, 480px);
   opacity:0;
   animation:krLogoIn 1.0s cubic-bezier(0.5,1.4,0.6,1) 0.6s both;
 }
@@ -682,11 +687,11 @@ nav{
 
 /* 좌/우 데이터 메트릭 (더 크게) */
 .kr-data-left{
-  position:absolute;left:40px;top:50%;
+  position:absolute;left:clamp(20px, 3vw, 60px);top:50%;
   transform:translateY(-50%);
-  display:flex;flex-direction:column;gap:18px;
+  display:flex;flex-direction:column;gap:clamp(12px, 1.8vh, 24px);
   font-family:'JetBrains Mono','Courier New',monospace;
-  font-size:11px;color:rgba(0,217,184,0.65);
+  font-size:clamp(10px, 0.85vw, 14px);color:rgba(0,217,184,0.65);
   letter-spacing:.12em;
 }
 .kr-data-left > div{
@@ -697,20 +702,20 @@ nav{
 .kr-data-left > div:nth-child(2){animation-delay:1.55s}
 .kr-data-left > div:nth-child(3){animation-delay:1.7s}
 .kr-data-left > div:nth-child(4){animation-delay:1.85s}
-.kr-data-left b{color:#00d9b8;font-weight:600;font-size:13px}
+.kr-data-left b{color:#00d9b8;font-weight:600;font-size:clamp(12px, 1vw, 16px)}
 .kr-data-left .label{
-  font-size:8px;color:rgba(0,217,184,0.4);
+  font-size:clamp(8px, 0.65vw, 11px);color:rgba(0,217,184,0.4);
   letter-spacing:.2em;text-transform:uppercase;
   display:block;margin-bottom:3px;
 }
 
 .kr-data-right{
-  position:absolute;right:40px;top:50%;
+  position:absolute;right:clamp(20px, 3vw, 60px);top:50%;
   transform:translateY(-50%);
-  display:flex;flex-direction:column;gap:18px;
+  display:flex;flex-direction:column;gap:clamp(12px, 1.8vh, 24px);
   text-align:right;
   font-family:'JetBrains Mono','Courier New',monospace;
-  font-size:11px;color:rgba(0,217,184,0.65);
+  font-size:clamp(10px, 0.85vw, 14px);color:rgba(0,217,184,0.65);
   letter-spacing:.12em;
 }
 .kr-data-right > div{
@@ -721,20 +726,20 @@ nav{
 .kr-data-right > div:nth-child(2){animation-delay:1.55s}
 .kr-data-right > div:nth-child(3){animation-delay:1.7s}
 .kr-data-right > div:nth-child(4){animation-delay:1.85s}
-.kr-data-right b{color:#00d9b8;font-weight:600;font-size:13px}
+.kr-data-right b{color:#00d9b8;font-weight:600;font-size:clamp(12px, 1vw, 16px)}
 .kr-data-right .label{
-  font-size:8px;color:rgba(0,217,184,0.4);
+  font-size:clamp(8px, 0.65vw, 11px);color:rgba(0,217,184,0.4);
   letter-spacing:.2em;text-transform:uppercase;
   display:block;margin-bottom:3px;
 }
 
 /* 하단 상태바 (더 크게) */
 .kr-status-bar{
-  position:absolute;bottom:140px;left:50%;
+  position:absolute;bottom:clamp(110px, 15vh, 180px);left:50%;
   transform:translateX(-50%);
-  display:flex;align-items:center;gap:24px;
+  display:flex;align-items:center;gap:clamp(14px, 2vw, 32px);
   font-family:'JetBrains Mono','Courier New',monospace;
-  font-size:12px;color:rgba(0,217,184,0.75);
+  font-size:clamp(10px, 0.95vw, 15px);color:rgba(0,217,184,0.75);
   letter-spacing:.2em;text-transform:uppercase;
   opacity:0;
   animation:krFadeIn .5s ease-out 2.0s both;
@@ -751,16 +756,16 @@ nav{
 
 /* 다음 버튼 */
 .kr-next{
-  position:absolute;bottom:60px;right:60px;
+  position:absolute;bottom:clamp(40px, 6vh, 80px);right:clamp(30px, 4vw, 80px);
   z-index:5;
   display:flex;align-items:center;gap:10px;
   background:rgba(0,217,184,0.08);
   border:1.5px solid rgba(0,217,184,0.5);
   color:#e8f4f0;
   font-family:'Pretendard','-apple-system',sans-serif;
-  font-size:14px;font-weight:600;
+  font-size:clamp(13px, 1.1vw, 18px);font-weight:600;
   letter-spacing:.1em;
-  padding:14px 32px;border-radius:4px;cursor:pointer;
+  padding:clamp(12px, 1.3vh, 18px) clamp(24px, 2.5vw, 42px);border-radius:4px;cursor:pointer;
   transition:all .25s ease;
   opacity:0;
   animation:krFadeIn .6s ease-out 0.5s both;
@@ -774,14 +779,14 @@ nav{
 }
 .kr-next:active{transform:translateY(0)}
 .kr-next-arrow{
-  font-size:16px;color:#00d9b8;
+  font-size:clamp(15px, 1.2vw, 20px);color:#00d9b8;
   transition:transform .25s ease;
 }
 .kr-next:hover .kr-next-arrow{transform:translateX(4px)}
 .kr-next-hint{
-  position:absolute;bottom:32px;right:60px;
+  position:absolute;bottom:clamp(20px, 3vh, 40px);right:clamp(30px, 4vw, 80px);
   font-family:'JetBrains Mono','Courier New',monospace;
-  font-size:9px;color:rgba(0,217,184,0.5);
+  font-size:clamp(9px, 0.7vw, 12px);color:rgba(0,217,184,0.5);
   letter-spacing:.2em;text-transform:uppercase;
   white-space:nowrap;
   opacity:0;

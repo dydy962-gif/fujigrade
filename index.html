@@ -554,6 +554,116 @@ nav{
 </head>
 <body>
 
+<!-- ════ ★ v15.27: 사이트 잠금 화면 (마스터 코드) ════ -->
+<style>
+.aiaces-lock{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;
+  background:rgba(4,6,8,0.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  font-family:-apple-system,'Pretendard',sans-serif;}
+.aiaces-lock .al-card{width:min(90vw,360px);background:#0a1118;border:1px solid rgba(0,217,184,0.35);
+  border-radius:18px;padding:clamp(24px,4vw,36px) clamp(20px,4vw,32px);text-align:center;
+  box-shadow:0 0 40px rgba(0,217,184,0.18);}
+.aiaces-lock .al-logo{font-size:clamp(26px,5vw,38px);font-weight:800;color:#00d9b8;letter-spacing:.12em;
+  text-shadow:0 0 16px rgba(0,217,184,0.5);}
+.aiaces-lock .al-title{margin-top:14px;font-size:16px;font-weight:600;color:#e8f4f0;}
+.aiaces-lock .al-sub{margin-top:6px;font-size:12.5px;color:rgba(232,244,240,0.6);line-height:1.5;}
+.aiaces-lock .al-input{width:100%;margin-top:18px;padding:13px 14px;font-size:18px;text-align:center;letter-spacing:.25em;
+  background:#040608;border:1px solid rgba(0,217,184,0.4);border-radius:10px;color:#e8f4f0;outline:none;box-sizing:border-box;}
+.aiaces-lock .al-input:focus{border-color:#00d9b8;box-shadow:0 0 0 3px rgba(0,217,184,0.15);}
+.aiaces-lock .al-msg{min-height:18px;margin-top:10px;font-size:12.5px;color:#ff8a8a;}
+.aiaces-lock .al-msg.ok{color:#00d9b8;}
+.aiaces-lock .al-btn{width:100%;margin-top:14px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;
+  background:#00d9b8;color:#04231d;border:none;border-radius:10px;font-family:inherit;}
+.aiaces-lock .al-btn:active{opacity:.85;}
+.aiaces-lock .al-menu{margin-top:14px;display:flex;flex-direction:column;gap:8px;}
+.aiaces-lock .al-mbtn{padding:11px;font-size:14px;cursor:pointer;background:#0f2230;color:#e8f4f0;
+  border:1px solid rgba(0,217,184,0.3);border-radius:10px;font-family:inherit;}
+.aiaces-lock .al-mbtn:active{background:#143040;}
+.aiaces-lock .al-foot{margin-top:16px;font-size:10.5px;color:rgba(232,244,240,0.4);letter-spacing:.1em;}
+</style>
+<div id="aiacesLock" class="aiaces-lock">
+  <div class="al-card">
+    <div class="al-logo">AI-ACES</div>
+    <div class="al-title" id="alTitle">접속 비밀번호</div>
+    <div class="al-sub" id="alSub">비밀번호를 입력하세요</div>
+    <input id="alInput" class="al-input" type="password" autocomplete="off" placeholder="••••"
+      onkeydown="if(event.key==='Enter')aiacesLockSubmit()" />
+    <div class="al-msg" id="alMsg"></div>
+    <button class="al-btn" id="alBtn" onclick="aiacesLockSubmit()">입장</button>
+    <div class="al-menu" id="alMenu" style="display:none">
+      <button class="al-mbtn" onclick="aiacesEnter()">▶ 입장하기</button>
+      <button class="al-mbtn" onclick="aiacesAskNewPw()">🔑 비밀번호 변경</button>
+      <button class="al-mbtn" onclick="aiacesAskNewMaster()">⚙ 마스터 코드 변경</button>
+    </div>
+    <div class="al-foot">KREI · 브라우저 접속 잠금</div>
+  </div>
+</div>
+<script>
+/* ★ v15.27: 사이트 잠금 — 키: aiaces_master, aiaces_pw.
+   최초 진입 시 마스터 설정 → 초기 비번 0000.
+   마스터 입력 시 메뉴(입장/비번변경/마스터변경).
+   비상열쇠: KREI-ACES-2026 (마스터 분실 시 재설정) — 실제 배포 전 바꾸기 권장. */
+(function(){
+  var EMERGENCY = 'KREI-ACES-2026';
+  var mode = 'login'; /* login | setMaster | newPw | newMaster */
+
+  function $(id){ return document.getElementById(id); }
+  function getMaster(){ try{ return localStorage.getItem('aiaces_master'); }catch(e){ return null; } }
+  function getPw(){ try{ return localStorage.getItem('aiaces_pw'); }catch(e){ return null; } }
+  function setMaster(v){ try{ localStorage.setItem('aiaces_master', v); }catch(e){} }
+  function setPw(v){ try{ localStorage.setItem('aiaces_pw', v); }catch(e){} }
+  function msg(t, ok){ var m=$('alMsg'); if(!m) return; m.textContent=t||''; m.className='al-msg'+(ok?' ok':''); }
+  function show(title, sub, btn, ph){ $('alTitle').textContent=title; $('alSub').innerHTML=sub; $('alBtn').textContent=btn;
+    $('alInput').value=''; $('alInput').placeholder=ph||''; $('alMenu').style.display='none';
+    $('alInput').style.display=''; $('alBtn').style.display=''; setTimeout(function(){$('alInput').focus();},50); }
+
+  function goLogin(){ mode='login'; show('접속 비밀번호','비밀번호를 입력하세요','입장','••••'); }
+  function goSetMaster(){ mode='setMaster'; show('최초 설정 — 마스터 코드','관리자용 마스터 코드를 새로 만드세요.<br>(분실 시 모든 권한이 잠깁니다)','마스터 코드 설정','마스터 코드'); }
+  function goNewPw(){ mode='newPw'; show('비밀번호 변경','새 비밀번호를 입력하세요','저장','새 비밀번호'); }
+  function goNewMaster(){ mode='newMaster'; show('마스터 코드 변경','새 마스터 코드를 입력하세요','저장','새 마스터 코드'); }
+
+  function enter(){ var el=$('aiacesLock'); if(el) el.style.display='none'; }
+
+  function submit(){
+    var v=$('alInput').value;
+    if(!v){ msg('값을 입력하세요'); return; }
+    if(mode==='setMaster'){
+      if(v.length<4){ msg('마스터 코드는 4자 이상으로 해주세요'); return; }
+      setMaster(v); setPw('0000');
+      msg('설정 완료! 초기 비밀번호는 0000 입니다', true);
+      setTimeout(enter, 900);
+      return;
+    }
+    if(mode==='newPw'){
+      if(v.length<4){ msg('4자 이상으로 해주세요'); return; }
+      setPw(v); msg('비밀번호가 변경되었습니다', true); setTimeout(goLogin, 900); return;
+    }
+    if(mode==='newMaster'){
+      if(v.length<4){ msg('4자 이상으로 해주세요'); return; }
+      setMaster(v); msg('마스터 코드가 변경되었습니다', true); setTimeout(goLogin, 900); return;
+    }
+    /* mode === 'login' */
+    if(v===getPw()){ enter(); return; }
+    if(v===getMaster()){ /* 마스터 메뉴 */
+      $('alInput').style.display='none'; $('alBtn').style.display='none';
+      $('alTitle').textContent='관리자 메뉴'; $('alSub').textContent='원하는 작업을 고르세요';
+      $('alMenu').style.display='flex'; msg(''); return;
+    }
+    if(v===EMERGENCY){ msg('비상 열쇠 확인 — 마스터 코드를 재설정합니다', true); setTimeout(goSetMaster, 800); return; }
+    msg('비밀번호가 올바르지 않습니다');
+  }
+
+  /* 전역 핸들러 (HTML onclick에서 호출) */
+  window.aiacesLockSubmit = submit;
+  window.aiacesEnter = enter;
+  window.aiacesAskNewPw = goNewPw;
+  window.aiacesAskNewMaster = goNewMaster;
+
+  /* 초기화: 마스터 없으면 최초 설정, 있으면 로그인 */
+  if(getMaster()){ goLogin(); } else { goSetMaster(); }
+})();
+</script>
+<!-- ════ 잠금 화면 끝 ════ -->
+
 <!-- ════ KREI 스플래시 - v15.8 KREI 인장 로고 메인 + 메타 강조 ════ -->
 <style>
 /* ★ 2026-05-23 v15.8: 표지 - KREI 원형 인장 로고가 메인
@@ -679,28 +789,40 @@ nav{
 
 /* ★ v15.18: 인장 아래 사과 착색도 태그라인 (영문/한글)
    인장과 적당한 여백 두고 차분한 톤으로 */
-.kr-tagline-en{
-  margin-top:clamp(28px, 3.5vh, 48px);  /* 인장과 거리 */
+.kr-brand{
+  margin-top:clamp(24px, 3vh, 42px);  /* 인장과 거리 */
   font-family:-apple-system,'Pretendard',sans-serif;
-  font-size:clamp(13px, 1.1vw, 18px);
+  font-size:clamp(34px, 4.6vw, 64px);
+  font-weight:800;
+  color:#00d9b8;
+  letter-spacing:.14em;
+  text-align:center;
+  text-shadow:0 0 18px rgba(0,217,184,0.55);
+  opacity:0;
+  animation:krFadeIn .7s ease-out 1.6s both;
+}
+.kr-tagline-en{
+  margin-top:clamp(8px, 1vh, 14px);  /* 브랜드와 거리 */
+  font-family:-apple-system,'Pretendard',sans-serif;
+  font-size:clamp(10px, 0.85vw, 13px);
   font-weight:500;
-  color:rgba(232,244,240,0.78);
+  color:rgba(232,244,240,0.70);
   letter-spacing:.18em;
   text-transform:uppercase;
   text-align:center;
   opacity:0;
-  animation:krFadeIn .7s ease-out 1.8s both;
+  animation:krFadeIn .7s ease-out 1.9s both;
 }
 .kr-tagline-ko{
-  margin-top:clamp(8px, 0.8vh, 14px);
+  margin-top:clamp(10px, 1vh, 16px);
   font-family:-apple-system,'Pretendard',sans-serif;
-  font-size:clamp(11px, 0.85vw, 14px);
-  font-weight:400;
-  color:rgba(0,217,184,0.6);
-  letter-spacing:.25em;
+  font-size:clamp(14px, 1.25vw, 19px);
+  font-weight:500;
+  color:rgba(0,217,184,0.72);
+  letter-spacing:.22em;
   text-align:center;
   opacity:0;
-  animation:krFadeIn .6s ease-out 2.1s both;
+  animation:krFadeIn .6s ease-out 2.2s both;
 }
 
 /* 외곽 그리는 링 (인장 외곽선) */
@@ -995,6 +1117,7 @@ body.is-revealing .page.active{
     </div>
     
     <!-- ★ v15.23: 인장 아래 태그라인 문구 변경 (영문 + 한글) -->
+    <div class="kr-brand">AI-ACES</div>
     <div class="kr-tagline-en">AI-based apple coloration estimation</div>
     <div class="kr-tagline-ko">AI 기반 사과 착색률 분석 시스템</div>
   </div>

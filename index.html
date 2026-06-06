@@ -2637,6 +2637,7 @@ function processSAM3Queue(){
   if(typeof updateQueueStatus === 'function') updateQueueStatus();
   
   /* 실제 SAM3 호출 */
+  job.photoObj._lastQueueIdx = job.idx; /* ★ 실패 시 재등록을 위해 idx 기억 */
   callSAM3Real(job.photoObj, job.idx, function(){
     /* 콜백 — 끝나면 3초 대기 후 다음 사진 */
     console.log('[SAM3 Queue] 1장 완료. 3초 후 다음 사진 처리');
@@ -2722,7 +2723,8 @@ function pollSAM3Result(photoObj, predictionId, attempt){
   var MAX_ATTEMPTS = 120;
   
   if(attempt >= MAX_ATTEMPTS){
-    toast('⚠ SAM3 시간 초과 (2분)');
+    toast('⚠ SAM3 시간 초과');
+    if(typeof sam3RequeueOrFail === 'function'){ sam3RequeueOrFail(photoObj, '시간초과'); return; }
     setBoxStatus('error');
     if(typeof notifyBatchDone === 'function') notifyBatchDone((photoObj.name||'사진')+' (시간초과)');
     callQueueDone(photoObj);
@@ -2766,6 +2768,7 @@ function pollSAM3Result(photoObj, predictionId, attempt){
         var apples = parseSAM3Output(data.output, photoObj);
         if(!apples || apples.length === 0){
           toast('⚠ SAM3가 사과를 찾지 못함');
+          if(typeof sam3RequeueOrFail === 'function'){ sam3RequeueOrFail(photoObj, '검출0(사과 못 찾음)'); return; }
           setBoxStatus('error');
           /* (C) 일괄 진행률 — 실패도 카운트 */
           if(typeof notifyBatchDone === 'function') notifyBatchDone((photoObj.name||'사진')+' (검출0)');
@@ -2773,6 +2776,7 @@ function pollSAM3Result(photoObj, predictionId, attempt){
           callQueueDone(photoObj);
           return;
         }
+        photoObj._sam3RetryCount = 0; /* ★ 성공 시 재시도 카운터 리셋 */
         photoObj.detectedApples = apples;
         photoObj.sam3Output = data.output;
         redraw();
@@ -2784,6 +2788,7 @@ function pollSAM3Result(photoObj, predictionId, attempt){
         callQueueDone(photoObj);
       } else if(data.status === 'failed' || data.status === 'canceled'){
         toast('⚠ SAM3 처리 실패: ' + (data.error || data.status));
+        if(typeof sam3RequeueOrFail === 'function'){ sam3RequeueOrFail(photoObj, 'Replicate '+(data.status||'실패')); return; }
         setBoxStatus('error');
         if(typeof notifyBatchDone === 'function') notifyBatchDone((photoObj.name||'사진')+' (실패)');
         callQueueDone(photoObj);
@@ -2795,6 +2800,7 @@ function pollSAM3Result(photoObj, predictionId, attempt){
     .catch(function(e){
       console.error('[SAM3 폴링] 오류:', e);
       toast('⚠ 폴링 실패: ' + e.message);
+      if(typeof sam3RequeueOrFail === 'function'){ sam3RequeueOrFail(photoObj, '폴링오류: '+(e.message||'네트워크')); return; }
       setBoxStatus('error');
       if(typeof notifyBatchDone === 'function') notifyBatchDone((photoObj.name||'사진')+' (오류)');
       callQueueDone(photoObj);
@@ -2813,6 +2819,36 @@ function callQueueDone(photoObj){
     photoObj._queueOnDone = null;
     cb();
   }
+}
+
+/* ════════════════════════════════════════════════════
+   ★ SAM3 실패 자동 재시도 (40장+ 대량 분석 안정화)
+   - 실패한 사진만 큐 맨 뒤에 1회 다시 등록 → 일시적 오류/예측 만료/순간 429 회복
+   - 재시도 후에도 실패하면 "어느 사진이 왜" 콘솔에 또렷이 남김 (사진 특정용)
+   - 다른 사진 진행은 막지 않음 (큐는 계속 흐름)
+   ════════════════════════════════════════════════════ */
+function sam3RequeueOrFail(photoObj, reason){
+  var nm = photoObj.name || ('사진#' + (photoObj._lastQueueIdx != null ? photoObj._lastQueueIdx : '?'));
+  photoObj._sam3RetryCount = photoObj._sam3RetryCount || 0;
+  if(photoObj._sam3RetryCount < 1){
+    photoObj._sam3RetryCount++;
+    console.warn('[SAM3 재시도] ' + nm + ' — 원인: ' + reason + ' → 자동 재시도 ' + photoObj._sam3RetryCount + '/1');
+    /* 검출 상태 초기화 후 큐 맨 뒤에 다시 등록 */
+    photoObj.detectedApples = null;
+    photoObj.sam3Output = null;
+    /* 현재 사진은 큐 뒤에 다시 넣고, 큐는 다음 사진으로 진행 */
+    window._sam3Queue.push({ photoObj: photoObj, idx: (photoObj._lastQueueIdx != null ? photoObj._lastQueueIdx : 0) });
+    if(typeof updateQueueStatus === 'function') updateQueueStatus();
+    var cb = photoObj._queueOnDone;
+    photoObj._queueOnDone = null;
+    if(typeof cb === 'function') cb(); /* 다음 사진 진행 (3초 후 processSAM3Queue) */
+    return;
+  }
+  /* 재시도 후에도 실패 → 최종 실패로 기록 (어느 사진/원인 명확히) */
+  console.error('[SAM3 최종실패] ' + nm + ' — 원인: ' + reason + ' (1회 재시도 후에도 실패). 이 사진을 다시 촬영하거나 흔들림·배경을 정리해 보세요.');
+  setBoxStatus('error');
+  if(typeof notifyBatchDone === 'function') notifyBatchDone(nm + ' (실패: ' + reason + ')');
+  callQueueDone(photoObj);
 }
 
 /* ════════════════════════════════════════════════════
@@ -4474,33 +4510,13 @@ function saveBoxResult(){
   };
   
   /* ★ 2026-05-21: 박스 모드도 2주 날씨 정보 저장 (기록 탭 표시용) */
-  if(typeof weatherCache !== 'undefined' && weatherCache){
-    var maxArrB=[],minArrB=[],allArrB=[],totRainB=0,sunTotalB=0,sunCntB=0;
-    for(var wi=0;wi<weatherCache.time.length;wi++){
-      var precB=weatherCache.precipitation_sum[wi]||0;
-      var tmaxB=weatherCache.temperature_2m_max[wi];
-      var tminB=weatherCache.temperature_2m_min[wi];
-      var sunB=weatherCache.sunshine_duration?weatherCache.sunshine_duration[wi]:null;
-      if(sunB!==null&&sunB!==undefined){sunTotalB+=sunB;sunCntB++;}
-      totRainB+=precB;
-      if(tmaxB!==null) maxArrB.push(tmaxB);
-      if(tminB!==null) minArrB.push(tminB);
-      if(tmaxB!==null&&tminB!==null) allArrB.push((tmaxB+tminB)/2);
-    }
-    record.weather={
-      avgMax:maxArrB.length?Math.round(maxArrB.reduce(function(a,b){return a+b;},0)/maxArrB.length*10)/10:null,
-      avgMin:minArrB.length?Math.round(minArrB.reduce(function(a,b){return a+b;},0)/minArrB.length*10)/10:null,
-      avgAll:allArrB.length?Math.round(allArrB.reduce(function(a,b){return a+b;},0)/allArrB.length*10)/10:null,
-      totalRain:Math.round(totRainB*10)/10,
-      sunHours:sunCntB>0?Math.round((sunTotalB/sunCntB/3600)*10)/10:0,
-      sunHoursTotal:sunCntB>0?Math.round((sunTotalB/3600)*10)/10:0
-    };
-  }
+  /* ★ v15.24: 사진마다 자기 촬영일(record.date)+자기 GPS로 날씨 따로 조회 (저장 후 비동기 갱신) */
+  record.weather = null;
   
   records.push(record);
   saveAllRecords(records);
+  if(typeof attachRecordWeather === 'function') attachRecordWeather(record); /* ★ 사진별 날씨 */
   
-  /* ★ 2026-05-21 v11 진단 로그: push 직후 + 저장 직후 길이 확인 */
   console.log('[saveBoxResult] push 직후 records.length=' + records.length + ', record.id=' + record.id + ', region=' + record.region + ', addr=' + record.address);
   /* localStorage 직후 검증 — 진짜 저장됐는지 다시 로드해서 확인 */
   var verifyRecords = loadAllRecords();
@@ -5711,6 +5727,78 @@ function getElev(m){
 }
 
 /* ── 날씨 그리드 + 2주 요약 (Open-Meteo) ── */
+/* ════════════════════════════════════════════════════
+   ★ v15.24: 사진별(촬영일별) 날씨 헬퍼
+   - 기존 문제: record.weather가 전역 weatherCache(마지막 사진 날짜) 하나로 채워져
+     20장을 넣어도 전부 같은 날씨가 저장됨.
+   - 해결: 각 레코드의 자기 촬영일(record.date) + 자기 GPS로 따로 조회.
+   ════════════════════════════════════════════════════ */
+function summarizeWeatherDaily(daily){
+  if(!daily || !daily.time) return null;
+  var maxA=[],minA=[],allA=[],rain=0,sunT=0,sunC=0;
+  for(var i=0;i<daily.time.length;i++){
+    var prec=daily.precipitation_sum?(daily.precipitation_sum[i]||0):0;
+    var tmax=daily.temperature_2m_max?daily.temperature_2m_max[i]:null;
+    var tmin=daily.temperature_2m_min?daily.temperature_2m_min[i]:null;
+    var sun=daily.sunshine_duration?daily.sunshine_duration[i]:null;
+    if(sun!==null&&sun!==undefined){sunT+=sun;sunC++;}
+    rain+=prec;
+    if(tmax!==null&&tmax!==undefined) maxA.push(tmax);
+    if(tmin!==null&&tmin!==undefined) minA.push(tmin);
+    if(tmax!==null&&tmin!==null&&tmax!==undefined&&tmin!==undefined) allA.push((tmax+tmin)/2);
+  }
+  function avg(arr){ return arr.length?Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length*10)/10:null; }
+  return {
+    avgMax:avg(maxA), avgMin:avg(minA), avgAll:avg(allA),
+    totalRain:Math.round(rain*10)/10,
+    sunHours:sunC>0?Math.round((sunT/sunC/3600)*10)/10:0,   /* 일평균 (h/일) */
+    sunHoursTotal:sunC>0?Math.round((sunT/3600)*10)/10:0     /* 2주 누적 (h) */
+  };
+}
+
+/* 특정 날짜 기준 2주(촬영일-13 ~ 촬영일) 날씨를 조회해서 요약을 cb로 전달 */
+function fetchWeatherForRecord(lat, lon, dateStr, cb){
+  if(!lat || !lon || !dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)){ cb(null); return; }
+  var endDate=dateStr;
+  var sObj=new Date(dateStr); sObj.setDate(sObj.getDate()-13);
+  var startDate=sObj.toISOString().slice(0,10);
+  var today=new Date().toISOString().slice(0,10);
+  var useArchive=(endDate<today); /* 과거면 archive, 최근/미래면 forecast */
+  var base=useArchive?'https://archive-api.open-meteo.com/v1/archive':'https://api.open-meteo.com/v1/forecast';
+  var url=base+'?latitude='+lat+'&longitude='+lon
+    +'&start_date='+startDate+'&end_date='+endDate
+    +'&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code,sunshine_duration'
+    +'&timezone=Asia%2FSeoul';
+  fetch(url)
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(d){ cb(d&&d.daily?summarizeWeatherDaily(d.daily):null); })
+    .catch(function(e){ console.warn('[Weather/Record] '+dateStr+' 조회 실패:', e.message); cb(null); });
+}
+
+/* 레코드 하나에 자기 촬영일 날씨를 비동기로 붙이고, 저장 + (기록탭 보일 때) 다시 그림 */
+function attachRecordWeather(record){
+  if(!record || !record.date){ return; }
+  if(!record.lat || !record.lon){
+    console.log('[Weather/Record] GPS 없음 — 날씨 생략 ('+(record.name||record.date)+')');
+    return;
+  }
+  /* 20장 동시 호출 시 순간 폭주 방지: 레코드마다 조금씩 시차 */
+  window._recWxN = (window._recWxN||0); var delay=(window._recWxN++ % 60)*350;
+  setTimeout(function(){
+    fetchWeatherForRecord(record.lat, record.lon, record.date, function(summary){
+      if(!summary) return;
+      record.weather = summary;
+      try { if(typeof records!=='undefined') saveAllRecords(records); } catch(e){}
+      console.log('[Weather/Record] '+record.date+' 적용: 최고'+summary.avgMax+'° 최저'+summary.avgMin+'° 일조'+summary.sunHours+'h/일');
+      /* 기록 탭이 열려 있으면 묶어서 한 번만 다시 그리기 */
+      if(window._recWxRenderTimer) clearTimeout(window._recWxRenderTimer);
+      window._recWxRenderTimer = setTimeout(function(){
+        try { if(typeof renderRecordsPage==='function') renderRecordsPage(); } catch(e){}
+      }, 800);
+    });
+  }, delay);
+}
+
 function loadWeatherGrid(lat,lon){
   var emptyEl=document.getElementById('weatherEmpty');
   if(emptyEl){emptyEl.style.display='block';emptyEl.textContent='🌦️ 날씨 데이터 가져오는 중...';emptyEl.style.color='var(--accent)';}
@@ -8685,31 +8773,11 @@ function saveResultData(res){
       avgMax:null,avgMin:null,avgAll:null,totalRain:0,sunHours:0
     }:null
   };
-  /* 날씨 요약 추가 */
-  if(weatherCache){
-    var maxArr2=[],minArr2=[],allArr2=[],totRain2=0,sunTotal2=0,sunCnt2=0;
-    for(var i=0;i<weatherCache.time.length;i++){
-      var prec2=weatherCache.precipitation_sum[i]||0;
-      var tmax2=weatherCache.temperature_2m_max[i];
-      var tmin2=weatherCache.temperature_2m_min[i];
-      var sun2=weatherCache.sunshine_duration?weatherCache.sunshine_duration[i]:null;
-      if(sun2!==null&&sun2!==undefined){sunTotal2+=sun2;sunCnt2++;}
-      totRain2+=prec2;
-      if(tmax2!==null) maxArr2.push(tmax2);
-      if(tmin2!==null) minArr2.push(tmin2);
-      if(tmax2!==null&&tmin2!==null) allArr2.push((tmax2+tmin2)/2);
-    }
-    record.weather={
-      avgMax:maxArr2.length?Math.round(maxArr2.reduce(function(a,b){return a+b;},0)/maxArr2.length*10)/10:null,
-      avgMin:minArr2.length?Math.round(minArr2.reduce(function(a,b){return a+b;},0)/minArr2.length*10)/10:null,
-      avgAll:allArr2.length?Math.round(allArr2.reduce(function(a,b){return a+b;},0)/allArr2.length*10)/10:null,
-      totalRain:Math.round(totRain2*10)/10,
-      sunHours:sunCnt2>0?Math.round((sunTotal2/sunCnt2/3600)*10)/10:0,  /* 일평균 (h/일) */
-      sunHoursTotal:sunCnt2>0?Math.round((sunTotal2/3600)*10)/10:0       /* 2주 누적 (h) */
-    };
-  }
+  /* ★ v15.24: 사진별 촬영일 날씨로 교체 (저장 후 비동기 적용) */
+  record.weather = null;
   records.push(record);
   saveAllRecords(records);
+  if(typeof attachRecordWeather === 'function') attachRecordWeather(record); /* ★ 사진별 날씨 */
 
   /* 중복 저장 방지: 이 사진을 저장됨으로 표시 */
   if(curPhoto) curPhoto.saved=true;
@@ -9582,23 +9650,23 @@ function switchCat(id,btn){
 /* ════ 논문 데이터 ════ */
 var PP={
   c1:[
-    {code:'C001',title:'다색공간 사과 등급 판정 — LAB a* 임계값',authors:'Papadavid et al.',journal:'Sensors (MDPI)',year:2014,note:'a*<0=미착색. 착색률 0% 기준값 a*=−5.7 근거.',doi:'https://doi.org/10.3390/s140304977',pdf:'https://www.mdpi.com/1424-8220/14/3/4977/pdf',r:null,kr:false},
-    {code:'C002',title:'ABA 처리·Red Fuji 착색 상관 (r=0.994)',authors:'Sha et al.',journal:'Frontiers in Plant Science',year:2019,note:'착색률 100% 기준값 a*=+38.8 산출 근거.',doi:'https://doi.org/10.3389/fpls.2019.01205',pdf:null,r:0.994,kr:false},
-    {code:'C003',title:'봉지 제거 후 착색 — 꼭지·배꼽부 지연 확인',authors:'Han et al.',journal:'PMC / Horticulture Research',year:2022,note:'꼭지가 적도부보다 착색 늦음. 꼭지 우선 측정 근거.',doi:'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9023286/',pdf:'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9023286/pdf/',r:null,kr:false},
-    {code:'C004',title:'야간온도·일조 → 착색 진행 방향',authors:'Wang et al.',journal:'PMC / Frontiers',year:2021,note:'착색 순서: 적도부→꼭지·배꼽. 꼭지 우선 근거.',doi:'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8139562/',pdf:'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8139562/pdf/',r:null,kr:false},
+    {code:'C001',title:'실시간 사과 등급 판정 (다색공간 CIE Lab a*)',authors:'Toylan & Kuscu',journal:'The Scientific World Journal',year:2014,note:'CIE Lab a* 값으로 적색부 97% 판별. 색공간 기반 착색 판정 근거.',doi:'https://pmc.ncbi.nlm.nih.gov/articles/PMC3915544/',pdf:null,r:null,kr:false},
+    {code:'C002',title:'외생 ABA 처리 → Red Fuji 착색(안토시아닌) 개선',authors:'Wang & Sha et al.',journal:'Frontiers in Plant Science (PMC)',year:2020,note:'질소 과다로 나빠진 착색을 ABA가 회복. 착색률 상한 a* 보완 근거.',doi:'https://pmc.ncbi.nlm.nih.gov/articles/PMC6997889/',pdf:null,r:0.994,kr:false},
+    {code:'C003',title:'봉지 제거 후 착색 — 꼭지·배꼽부 지연 확인',authors:'Han et al.',journal:'Horticulture Research (PMC)',year:2022,note:'꼭지가 적도부보다 착색 늦음. 꼭지 우선 측정 근거.',doi:'https://pmc.ncbi.nlm.nih.gov/articles/PMC9023286/',pdf:null,r:null,kr:false},
+    {code:'C004',title:'야간온도·일조 → 착색 진행 방향',authors:'Wang et al.',journal:'Frontiers in Plant Science (PMC)',year:2021,note:'착색 순서: 적도부→꼭지·배꼽. 꼭지 우선 근거.',doi:'https://pmc.ncbi.nlm.nih.gov/articles/PMC8139562/',pdf:null,r:null,kr:false},
     {code:'C005',title:'Fuji 7계통 착색·안토시아닌 비교',authors:'Arana et al.',journal:'Scientia Horticulturae',year:2012,note:'LAB a* 최대값 기준 보완.',doi:'https://doi.org/10.1016/j.scienta.2012.01.024',pdf:null,r:null,kr:false}
   ],
   c2:[
-    {code:'M001',title:'MeJA·광질 → 착색 대사체',authors:'Sun et al.',journal:'PMC / Molecules',year:2022,note:'UV+MeJA 착색 촉진.',doi:'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9136102/',pdf:'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9136102/pdf/',r:null,kr:false},
-    {code:'M002',title:'Red Fuji 기계비전·NIR 등급 판정',authors:'Lu et al.',journal:'PLOS ONE',year:2022,note:'CARS-PLS Rp=0.9469.',doi:'https://doi.org/10.1371/journal.pone.0266456',pdf:'https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0266456&type=printable',r:0.947,kr:false},
-    {code:'M003',title:'저장 후지 껍질 파이토케미컬',authors:'Kim et al.',journal:'ResearchGate',year:2024,note:'안토시아닌 0.13~0.26mg CE/g fw.',doi:'https://www.researchgate.net/publication',pdf:null,r:null,kr:false}
+    {code:'M001',title:'MeJA·광질 → 착색 대사체',authors:'Sun et al.',journal:'Molecules (PMC)',year:2022,note:'UV+MeJA 착색 촉진.',doi:'https://pmc.ncbi.nlm.nih.gov/articles/PMC9136102/',pdf:null,r:null,kr:false},
+    {code:'M002',title:'Red Fuji 기계비전·NIR 등급 판정 (CARS-PLS)',authors:'Wang et al.',journal:'PLOS ONE',year:2022,note:'당도 예측 Rp=0.9469. 기계비전+근적외 분광 결합.',doi:'https://pmc.ncbi.nlm.nih.gov/articles/PMC9352003/',pdf:null,r:0.947,kr:false},
+    {code:'M003',title:'지능형 비전·머신러닝 기반 사과 등급 기술 (리뷰)',authors:'Foods (MDPI)',journal:'Foods',year:2025,note:'딥러닝·머신비전 사과 등급 최신 동향. YOLO 등 적용 사례.',doi:'https://doi.org/10.3390/foods14020258',pdf:null,r:null,kr:false}
   ],
   c3:[
-    {code:'K001',title:'수확 시기별 후지 소비자 기호도·이화학특성',authors:'Jang et al.',journal:'한국원예학회지',year:2014,note:'국내 후지 착색률-기호도. LAB b값 r=0.794.',doi:'https://www.koreascience.kr/article/JAKO201419163875088.page',pdf:null,r:0.761,kr:true},
+    {code:'K001',title:'변색단계별 ‘홍로’ 사과 착색 및 당 축적 유전자 발현',authors:'국립원예특작과학원',journal:'한국원예학회 (KoreaScience)',year:2016,note:'착색 단계가 진행될수록 당 합성 유전자 발현 증가 — 착색과 당도 연관 근거.',doi:'https://www.koreascience.kr/article/JAKO201614652522053.pdf',pdf:null,r:null,kr:true},
     {code:'K002',title:'봉지 제거 시기가 후지 착색에 미치는 영향',authors:'Lee et al.',journal:'원예과학기술지',year:2022,note:'국내 봉지 제거 시기별 착색률 변화.',doi:'https://cdn.apub.kr/journalsite/sites/kshs/2022-040-02/N0130400208/N0130400208.pdf',pdf:'https://cdn.apub.kr/journalsite/sites/kshs/2022-040-02/N0130400208/N0130400208.pdf',r:null,kr:true},
-    {code:'K003',title:'기상요인이 사과 착색·수량에 미치는 영향',authors:'Han et al.',journal:'한국농림기상학회지',year:2014,note:'야간 저온·일조시간이 착색률 최대 영향.',doi:'https://www.koreascience.or.kr/article/JAKO201403359904208.page',pdf:null,r:null,kr:true},
+    {code:'K003',title:'착색을 좋게 하는 사과 과원관리 기술 (온도·일조)',authors:'농촌진흥청 국립원예특작과학원',journal:'농사로 (RDA)',year:2020,note:'안토시아닌 생성 적온 15~20℃, 일교차·일조가 착색 좌우. 날씨 연계 근거.',doi:'https://www.rda.go.kr/middlePopOpenPopNongsaroDBView.do?no=1047&sj=%EC%83%89%EA%B9%94',pdf:null,r:null,kr:true},
     {code:'K004',title:'반사필름 피복이 사과 착색에 미치는 영향',authors:'Kim et al.',journal:'원예과학기술지',year:2021,note:'꼭지·경와부 착색 지연 확인.',doi:'https://doi.org/10.7235/HORT.20210076',pdf:null,r:null,kr:true},
-    {code:'K005',title:'기후변화 조건 봉지 제거·착색·일소',authors:'Kwon et al.',journal:'PMC / Agronomy',year:2025,note:'한국 고온 조건 최신 데이터.',doi:'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12473397/',pdf:null,r:null,kr:true}
+    {code:'K005',title:'고온 처리 사과 전사체 — 안토시아닌 억제 기작',authors:'Han et al.',journal:'Int. J. Mol. Sci. (PMC)',year:2022,note:'35℃ 고온이 착색(안토시아닌)을 억제. 기후·고온 영향 최신 근거.',doi:'https://pmc.ncbi.nlm.nih.gov/articles/PMC8998508/',pdf:null,r:null,kr:true}
   ]
 };
 function pCard(p){

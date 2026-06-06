@@ -586,7 +586,7 @@ nav{
     <div class="al-title" id="alTitle">접속 비밀번호</div>
     <div class="al-sub" id="alSub">비밀번호를 입력하세요</div>
     <input id="alInput" class="al-input" type="password" autocomplete="off" placeholder="••••"
-      onkeydown="if(event.key==='Enter')aiacesLockSubmit()" />
+      onkeydown="event.stopPropagation(); if(event.key==='Enter'){event.preventDefault();aiacesLockSubmit();}" />
     <div class="al-msg" id="alMsg"></div>
     <button class="al-btn" id="alBtn" onclick="aiacesLockSubmit()">입장</button>
     <div class="al-menu" id="alMenu" style="display:none">
@@ -1209,6 +1209,9 @@ function hideKreiSplash(){
 (function(){
   /* 키보드 단축키 — Enter / Esc / Space 로 다음으로 */
   function skipKey(e){
+    /* ★ v15.28: 잠금 화면이 떠 있는 동안엔 Enter/Space/ESC 무시 (표지가 같이 넘어가는 것 방지) */
+    var lk=document.getElementById('aiacesLock');
+    if(lk && lk.style.display!=='none') return;
     if(e.key==='Enter'||e.key==='Escape'||e.key===' '){
       hideKreiSplash();
       document.removeEventListener('keydown',skipKey);
